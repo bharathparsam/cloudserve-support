@@ -1,0 +1,1515 @@
+{
+  "StrictModel": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "StrictModel",
+    "type": "object"
+  },
+  "TicketInput": {
+    "properties": {
+      "channel": {
+        "enum": [
+          "email",
+          "chat",
+          "docs_comment",
+          "forum"
+        ],
+        "title": "Channel",
+        "type": "string"
+      },
+      "body": {
+        "maxLength": 20000,
+        "minLength": 1,
+        "title": "Body",
+        "type": "string"
+      },
+      "subject": {
+        "default": "",
+        "maxLength": 1000,
+        "title": "Subject",
+        "type": "string"
+      },
+      "ticket_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ticket Id"
+      },
+      "received_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Received At"
+      },
+      "customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Customer Id"
+      },
+      "customer_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Customer Name"
+      }
+    },
+    "required": [
+      "channel",
+      "body"
+    ],
+    "title": "TicketInput",
+    "type": "object"
+  },
+  "NormalizedTicket": {
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "default": 1,
+        "title": "Schema Version",
+        "type": "integer"
+      },
+      "record_id": {
+        "title": "Record Id",
+        "type": "string"
+      },
+      "run_id": {
+        "title": "Run Id",
+        "type": "string"
+      },
+      "input_index": {
+        "title": "Input Index",
+        "type": "integer"
+      },
+      "ticket_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ticket Id"
+      },
+      "channel": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Channel"
+      },
+      "subject": {
+        "default": "",
+        "title": "Subject",
+        "type": "string"
+      },
+      "body": {
+        "default": "",
+        "title": "Body",
+        "type": "string"
+      },
+      "received_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Received At"
+      },
+      "ingested_at": {
+        "title": "Ingested At",
+        "type": "string"
+      },
+      "input_hash": {
+        "title": "Input Hash",
+        "type": "string"
+      },
+      "valid": {
+        "title": "Valid",
+        "type": "boolean"
+      },
+      "errors": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "title": "Errors",
+        "type": "array"
+      }
+    },
+    "required": [
+      "record_id",
+      "run_id",
+      "input_index",
+      "ingested_at",
+      "input_hash",
+      "valid"
+    ],
+    "title": "NormalizedTicket",
+    "type": "object"
+  },
+  "Dimension": {
+    "additionalProperties": false,
+    "properties": {
+      "label": {
+        "title": "Label",
+        "type": "string"
+      },
+      "raw_probabilities": {
+        "additionalProperties": {
+          "type": "number"
+        },
+        "title": "Raw Probabilities",
+        "type": "object"
+      },
+      "raw_probability": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Raw Probability",
+        "type": "number"
+      },
+      "calibrated_probability": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Calibrated Probability",
+        "type": "number"
+      },
+      "alternatives": {
+        "default": [],
+        "items": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "title": "Alternatives",
+        "type": "array"
+      },
+      "provider_confidence": {
+        "default": null,
+        "title": "Provider Confidence",
+        "type": "null"
+      }
+    },
+    "required": [
+      "label",
+      "raw_probabilities",
+      "raw_probability",
+      "calibrated_probability"
+    ],
+    "title": "Dimension",
+    "type": "object"
+  },
+  "Classification": {
+    "$defs": {
+      "Dimension": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "raw_probabilities": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Raw Probabilities",
+            "type": "object"
+          },
+          "raw_probability": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Raw Probability",
+            "type": "number"
+          },
+          "calibrated_probability": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Calibrated Probability",
+            "type": "number"
+          },
+          "alternatives": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "provider_confidence": {
+            "default": null,
+            "title": "Provider Confidence",
+            "type": "null"
+          }
+        },
+        "required": [
+          "label",
+          "raw_probabilities",
+          "raw_probability",
+          "calibrated_probability"
+        ],
+        "title": "Dimension",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "status": {
+        "enum": [
+          "ok",
+          "unavailable"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "intent": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Dimension"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "urgency": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Dimension"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "artifact_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Artifact Id"
+      },
+      "calibration_status": {
+        "default": "unavailable",
+        "title": "Calibration Status",
+        "type": "string"
+      },
+      "reason": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Reason"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "Classification",
+    "type": "object"
+  },
+  "SourcePassage": {
+    "additionalProperties": false,
+    "properties": {
+      "doc_id": {
+        "title": "Doc Id",
+        "type": "string"
+      },
+      "chunk_id": {
+        "title": "Chunk Id",
+        "type": "string"
+      },
+      "title": {
+        "title": "Title",
+        "type": "string"
+      },
+      "content": {
+        "title": "Content",
+        "type": "string"
+      },
+      "start": {
+        "title": "Start",
+        "type": "integer"
+      },
+      "end": {
+        "title": "End",
+        "type": "integer"
+      },
+      "corpus_hash": {
+        "title": "Corpus Hash",
+        "type": "string"
+      },
+      "score": {
+        "title": "Score",
+        "type": "number"
+      },
+      "score_kind": {
+        "default": "cosine_similarity",
+        "title": "Score Kind",
+        "type": "string"
+      }
+    },
+    "required": [
+      "doc_id",
+      "chunk_id",
+      "title",
+      "content",
+      "start",
+      "end",
+      "corpus_hash",
+      "score"
+    ],
+    "title": "SourcePassage",
+    "type": "object"
+  },
+  "Assessment": {
+    "additionalProperties": false,
+    "properties": {
+      "decision": {
+        "enum": [
+          "clear",
+          "escalate",
+          "unknown"
+        ],
+        "title": "Decision",
+        "type": "string"
+      },
+      "reasons": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Reasons",
+        "type": "array"
+      },
+      "evidence": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "title": "Evidence",
+        "type": "array"
+      }
+    },
+    "required": [
+      "decision",
+      "reasons"
+    ],
+    "title": "Assessment",
+    "type": "object"
+  },
+  "Citation": {
+    "additionalProperties": false,
+    "properties": {
+      "doc_id": {
+        "title": "Doc Id",
+        "type": "string"
+      },
+      "chunk_id": {
+        "title": "Chunk Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "doc_id",
+      "chunk_id"
+    ],
+    "title": "Citation",
+    "type": "object"
+  },
+  "Claim": {
+    "$defs": {
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "chunk_id"
+        ],
+        "title": "Citation",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "claim_id": {
+        "title": "Claim Id",
+        "type": "string"
+      },
+      "text": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "title": "Text",
+        "type": "string"
+      },
+      "citations": {
+        "items": {
+          "$ref": "#/$defs/Citation"
+        },
+        "minItems": 1,
+        "title": "Citations",
+        "type": "array"
+      }
+    },
+    "required": [
+      "claim_id",
+      "text",
+      "citations"
+    ],
+    "title": "Claim",
+    "type": "object"
+  },
+  "AnswerDraft": {
+    "$defs": {
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "chunk_id"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "Claim": {
+        "additionalProperties": false,
+        "properties": {
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/$defs/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claim_id",
+          "text",
+          "citations"
+        ],
+        "title": "Claim",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "status": {
+        "enum": [
+          "draft",
+          "insufficient_support"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "automation_disclosure": {
+        "title": "Automation Disclosure",
+        "type": "string"
+      },
+      "claims": {
+        "items": {
+          "$ref": "#/$defs/Claim"
+        },
+        "maxItems": 10,
+        "title": "Claims",
+        "type": "array"
+      },
+      "uncertainties": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "title": "Uncertainties",
+        "type": "array"
+      }
+    },
+    "required": [
+      "status",
+      "automation_disclosure",
+      "claims"
+    ],
+    "title": "AnswerDraft",
+    "type": "object"
+  },
+  "GuardrailResult": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "version": {
+        "default": "1",
+        "title": "Version",
+        "type": "string"
+      },
+      "status": {
+        "enum": [
+          "pass",
+          "fail",
+          "unknown",
+          "not_applicable"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "reasons": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "title": "Reasons",
+        "type": "array"
+      },
+      "claim_ids": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "title": "Claim Ids",
+        "type": "array"
+      }
+    },
+    "required": [
+      "name",
+      "status"
+    ],
+    "title": "GuardrailResult",
+    "type": "object"
+  },
+  "SemanticCheck": {
+    "$defs": {
+      "GuardrailResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "default": "1",
+            "title": "Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "claim_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Claim Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "GuardrailResult",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "claims": {
+        "items": {
+          "$ref": "#/$defs/GuardrailResult"
+        },
+        "title": "Claims",
+        "type": "array"
+      },
+      "instruction_integrity": {
+        "enum": [
+          "pass",
+          "fail",
+          "unknown"
+        ],
+        "title": "Instruction Integrity",
+        "type": "string"
+      },
+      "tone_scope": {
+        "enum": [
+          "pass",
+          "fail",
+          "unknown"
+        ],
+        "title": "Tone Scope",
+        "type": "string"
+      }
+    },
+    "required": [
+      "claims",
+      "instruction_integrity",
+      "tone_scope"
+    ],
+    "title": "SemanticCheck",
+    "type": "object"
+  },
+  "RouteDecision": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "enum": [
+          "auto_candidate",
+          "escalate"
+        ],
+        "title": "Action",
+        "type": "string"
+      },
+      "reason_codes": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Reason Codes",
+        "type": "array"
+      },
+      "reason": {
+        "title": "Reason",
+        "type": "string"
+      },
+      "policy_hash": {
+        "title": "Policy Hash",
+        "type": "string"
+      },
+      "thresholds": {
+        "additionalProperties": true,
+        "default": {},
+        "title": "Thresholds",
+        "type": "object"
+      }
+    },
+    "required": [
+      "action",
+      "reason_codes",
+      "reason",
+      "policy_hash"
+    ],
+    "title": "RouteDecision",
+    "type": "object"
+  },
+  "Handoff": {
+    "$defs": {
+      "Classification": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Dimension"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Dimension"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Artifact Id"
+          },
+          "calibration_status": {
+            "default": "unavailable",
+            "title": "Calibration Status",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Classification",
+        "type": "object"
+      },
+      "Dimension": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "raw_probabilities": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Raw Probabilities",
+            "type": "object"
+          },
+          "raw_probability": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Raw Probability",
+            "type": "number"
+          },
+          "calibrated_probability": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Calibrated Probability",
+            "type": "number"
+          },
+          "alternatives": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "provider_confidence": {
+            "default": null,
+            "title": "Provider Confidence",
+            "type": "null"
+          }
+        },
+        "required": [
+          "label",
+          "raw_probabilities",
+          "raw_probability",
+          "calibrated_probability"
+        ],
+        "title": "Dimension",
+        "type": "object"
+      },
+      "SourcePassage": {
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "corpus_hash": {
+            "title": "Corpus Hash",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "score_kind": {
+            "default": "cosine_similarity",
+            "title": "Score Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "chunk_id",
+          "title",
+          "content",
+          "start",
+          "end",
+          "corpus_hash",
+          "score"
+        ],
+        "title": "SourcePassage",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "summary": {
+        "title": "Summary",
+        "type": "string"
+      },
+      "reason": {
+        "title": "Reason",
+        "type": "string"
+      },
+      "original_reference": {
+        "title": "Original Reference",
+        "type": "string"
+      },
+      "classification": {
+        "$ref": "#/$defs/Classification"
+      },
+      "sources": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/SourcePassage"
+        },
+        "title": "Sources",
+        "type": "array"
+      },
+      "troubleshooting": {
+        "default": "Previous troubleshooting not supplied.",
+        "title": "Troubleshooting",
+        "type": "string"
+      },
+      "missing_context": {
+        "default": [
+          "Previous troubleshooting not supplied."
+        ],
+        "items": {
+          "type": "string"
+        },
+        "title": "Missing Context",
+        "type": "array"
+      },
+      "unresolved_questions": {
+        "default": [
+          "An operator must assess the request and confirm next steps."
+        ],
+        "items": {
+          "type": "string"
+        },
+        "title": "Unresolved Questions",
+        "type": "array"
+      },
+      "provenance": {
+        "default": "local_template",
+        "title": "Provenance",
+        "type": "string"
+      }
+    },
+    "required": [
+      "summary",
+      "reason",
+      "original_reference",
+      "classification"
+    ],
+    "title": "Handoff",
+    "type": "object"
+  },
+  "Outcome": {
+    "$defs": {
+      "Classification": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Dimension"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Dimension"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Artifact Id"
+          },
+          "calibration_status": {
+            "default": "unavailable",
+            "title": "Calibration Status",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Classification",
+        "type": "object"
+      },
+      "Dimension": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "raw_probabilities": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Raw Probabilities",
+            "type": "object"
+          },
+          "raw_probability": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Raw Probability",
+            "type": "number"
+          },
+          "calibrated_probability": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Calibrated Probability",
+            "type": "number"
+          },
+          "alternatives": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "provider_confidence": {
+            "default": null,
+            "title": "Provider Confidence",
+            "type": "null"
+          }
+        },
+        "required": [
+          "label",
+          "raw_probabilities",
+          "raw_probability",
+          "calibrated_probability"
+        ],
+        "title": "Dimension",
+        "type": "object"
+      },
+      "GuardrailResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "default": "1",
+            "title": "Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "claim_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Claim Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "GuardrailResult",
+        "type": "object"
+      },
+      "Handoff": {
+        "additionalProperties": false,
+        "properties": {
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "original_reference": {
+            "title": "Original Reference",
+            "type": "string"
+          },
+          "classification": {
+            "$ref": "#/$defs/Classification"
+          },
+          "sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/SourcePassage"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "troubleshooting": {
+            "default": "Previous troubleshooting not supplied.",
+            "title": "Troubleshooting",
+            "type": "string"
+          },
+          "missing_context": {
+            "default": [
+              "Previous troubleshooting not supplied."
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Context",
+            "type": "array"
+          },
+          "unresolved_questions": {
+            "default": [
+              "An operator must assess the request and confirm next steps."
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved Questions",
+            "type": "array"
+          },
+          "provenance": {
+            "default": "local_template",
+            "title": "Provenance",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "reason",
+          "original_reference",
+          "classification"
+        ],
+        "title": "Handoff",
+        "type": "object"
+      },
+      "RouteDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "auto_candidate",
+              "escalate"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "policy_hash": {
+            "title": "Policy Hash",
+            "type": "string"
+          },
+          "thresholds": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Thresholds",
+            "type": "object"
+          }
+        },
+        "required": [
+          "action",
+          "reason_codes",
+          "reason",
+          "policy_hash"
+        ],
+        "title": "RouteDecision",
+        "type": "object"
+      },
+      "SourcePassage": {
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "corpus_hash": {
+            "title": "Corpus Hash",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "score_kind": {
+            "default": "cosine_similarity",
+            "title": "Score Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "chunk_id",
+          "title",
+          "content",
+          "start",
+          "end",
+          "corpus_hash",
+          "score"
+        ],
+        "title": "SourcePassage",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "default": 1,
+        "title": "Schema Version",
+        "type": "integer"
+      },
+      "record_id": {
+        "title": "Record Id",
+        "type": "string"
+      },
+      "run_id": {
+        "title": "Run Id",
+        "type": "string"
+      },
+      "input_index": {
+        "title": "Input Index",
+        "type": "integer"
+      },
+      "action": {
+        "enum": [
+          "auto_respond",
+          "escalate"
+        ],
+        "title": "Action",
+        "type": "string"
+      },
+      "blocked": {
+        "title": "Blocked",
+        "type": "boolean"
+      },
+      "reason": {
+        "title": "Reason",
+        "type": "string"
+      },
+      "answer": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Answer"
+      },
+      "handoff": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Handoff"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "classification": {
+        "$ref": "#/$defs/Classification"
+      },
+      "sources": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/SourcePassage"
+        },
+        "title": "Sources",
+        "type": "array"
+      },
+      "route": {
+        "$ref": "#/$defs/RouteDecision"
+      },
+      "checks": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/GuardrailResult"
+        },
+        "title": "Checks",
+        "type": "array"
+      },
+      "provenance": {
+        "default": "Live",
+        "title": "Provenance",
+        "type": "string"
+      },
+      "timings": {
+        "additionalProperties": {
+          "type": "number"
+        },
+        "default": {},
+        "title": "Timings",
+        "type": "object"
+      },
+      "versions": {
+        "additionalProperties": true,
+        "default": {},
+        "title": "Versions",
+        "type": "object"
+      },
+      "closed": {
+        "default": null,
+        "title": "Closed",
+        "type": "null"
+      }
+    },
+    "required": [
+      "record_id",
+      "run_id",
+      "input_index",
+      "action",
+      "blocked",
+      "reason",
+      "classification",
+      "route"
+    ],
+    "title": "Outcome",
+    "type": "object"
+  },
+  "ControlInput": {
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "title": "Enabled",
+        "type": "boolean"
+      },
+      "reason": {
+        "maxLength": 500,
+        "minLength": 3,
+        "title": "Reason",
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "reason"
+    ],
+    "title": "ControlInput",
+    "type": "object"
+  },
+  "ReviewInput": {
+    "additionalProperties": false,
+    "properties": {
+      "status": {
+        "enum": [
+          "open",
+          "in_review",
+          "reviewed"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "notes": {
+        "default": "",
+        "maxLength": 2000,
+        "title": "Notes",
+        "type": "string"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "ReviewInput",
+    "type": "object"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "version": "decider-development-1",
+  "mode_default": "shadow",
+  "calibration_ready": false,
+  "calibration_evidence": null,
+  "thresholds": {
+    "input_safe_min": null,
+    "instruction_integrity_min": null,
+    "retrieval_relevant_min": null,
+    "retrieval_answerable_min": null,
+    "claim_support_min": null,
+    "tone_scope_min": null
+  },
+  "score_semantics": "Raw model probabilities, not asserted CloudServe-calibrated confidence.",
+  "selection_protocol": "Select and review semantic thresholds using development calibration evidence only; expected document IDs are retrieval proxies and cannot establish semantic claim support or safety.",
+  "failure_policy": "Unknown, missing, refused or unavailable mandatory evaluation blocks in enforce mode. Shadow observations cannot authorize a release.",
+  "mandatory_local_controls": "Input validation, sanitization, source resolution, scope policy, privacy, audit and operator stop remain mandatory and cannot be bypassed by this evaluator."
+}

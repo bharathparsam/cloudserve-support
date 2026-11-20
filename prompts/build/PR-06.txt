@@ -1,0 +1,1 @@
+PR-06 v1.2 Optional handoff summarization reserved. Runtime uses a deterministic local faithful template; no hosted summarization call is made.

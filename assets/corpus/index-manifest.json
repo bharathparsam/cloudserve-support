@@ -1,0 +1,16 @@
+{
+  "embeddings_hash": "5d22763c76967ce49d8b64e385b3f6a5b8af0860234122b6d61a2ba0ad2dff62",
+  "corpus_hash": "6622c2bd291b375437ea472959f81d106978f0ecfb9e3bb7eb40d3a9b8d3c038",
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "embedding_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+  "collection": "cloudserve-967d2f169912517f72e4",
+  "chunker": "offset-newline-token-capped-v1",
+  "size": 1000,
+  "overlap": 120,
+  "max_tokens": 256,
+  "similarity": "1 - Chroma cosine distance",
+  "collection_fingerprint": "1705b442c0a8c0352823523bc884475e73794b8b6e384e2c93347ebf356af5a7",
+  "document_count": 29,
+  "chunk_count": 55,
+  "retrieval_floor": 0.5888271927833557
+}

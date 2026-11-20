@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "independent_assessors_required": 2,
+  "minimum_generated_answers": 50,
+  "sampling": "First 50 generated answers by ascending input position; label extra development cohorts separately if validation has fewer than 50 answers.",
+  "dimensions": {
+    "support_1_5": "1 unsupported or contradicted; 2 major support gaps; 3 partial support; 4 supported with minor omission; 5 every claim fully supported by its cited passage.",
+    "correctness_1_5": "1 wrong or unsafe; 2 major error; 3 useful but incomplete; 4 correct with minor omission; 5 correct and complete within documented scope.",
+    "clarity_1_5": "1 unusable; 2 confusing; 3 understandable with effort; 4 clear; 5 concise, clear and actionable informational guidance.",
+    "uncertainty_1_5": "1 invented certainty or authority; 2 major uncertainty omitted; 3 some gaps acknowledged; 4 appropriate uncertainty; 5 precise scope, caveats and missing information."
+  },
+  "quality": "sum of four dimension points / 20 * 100; do not equate with five-point satisfaction.",
+  "satisfaction_1_5": "Separate human response-quality proxy: 1 very poor, 2 poor, 3 acceptable, 4 good, 5 excellent. It is not live customer CSAT.",
+  "unsupported_claims": "Human assessor records a nonnegative count independently before reconciliation; real citation IDs alone do not prove support.",
+  "agreement": "Report paired count, exact agreement across all four dimension scores, mean absolute score difference and retained disagreements.",
+  "privacy": "Review only safe generated answers and cited passages; do not request passwords, credentials or raw original customer identifiers.",
+  "missing_reviews": "Unavailable; never infer a pass, approval, satisfaction, fairness or closure."
+}

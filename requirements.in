@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+python-dotenv
+langgraph
+langchain-core
+scikit-learn
+numpy
+scipy
+joblib
+chromadb
+sentence-transformers
+httpx
+prometheus-client
+pytest
