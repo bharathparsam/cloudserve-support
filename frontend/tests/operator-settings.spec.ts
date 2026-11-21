@@ -1,6 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 // Explicit contract fixtures only. These tests never verify live model pricing or inference.
 const initial = {
+  generation_mode: "free_only",
+  paid_budget: {limit_usd:"0.25",spent_usd:"0.0023492",reserved_usd:"0",remaining_usd:"0.2476508",blocked:false,reason:null},
   generation_model: "fixture/writer:free",
   decider_model: "fixture/decider:free",
   decider_mode: "shadow",
@@ -50,6 +52,9 @@ async function setup(
     if (path === "/api/v1/status")
       data = {
         mode: "Fixture replay",
+        generation_mode: settings.generation_mode,
+        paid_budget: settings.paid_budget,
+        provider: {configured_model:settings.generation_model},
         status: "degraded",
         issues: ["UI contract fixture only"],
         decider: { mode: "shadow", policy_ready: false },
@@ -209,6 +214,7 @@ test("settings discover free choices, keep secrets private, enforce guard and pe
   ).toBeVisible();
   const save = calls.find((c) => c.path === "/api/v1/settings");
   expect(save?.body).toEqual({
+    generation_mode: "free_only",
     generation_model: "fixture/alternate-writer:free",
     decider_model: initial.decider_model,
     decider_mode: "disabled",
@@ -362,4 +368,28 @@ test("bundled launch remains blocked while automation is stopped", async ({
     page.getByText(/Enable automatic answers explicitly before launching/),
   ).toBeVisible();
   expect(calls.some((c) => c.path === "/api/v1/datasets/launch")).toBe(false);
+});
+
+test("paid development mode requires explicit consent and saves the selected policy without enabling automation",async({page})=>{
+ const calls=await setup(page);await page.goto('/');await connect(page);
+ await page.getByRole('navigation').getByRole('button',{name:'Settings',exact:true}).click();
+ await page.locator('#generation-mode').selectOption('paid_test');
+ await expect(page.locator('#generation-model')).toHaveValue('openai/gpt-4.1-mini');
+ await expect(page.getByLabel('Maximum retries',{exact:true})).toHaveValue('0');
+ await expect(page.getByLabel('Maximum retries',{exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Save settings',exact:true}).click();
+ expect(calls.some(c=>c.path==='/api/v1/settings')).toBe(false);
+ await page.getByLabel('I acknowledge paid development testing within the shared USD0.25 cap.',{exact:true}).check();
+ await page.getByRole('button',{name:'Save settings',exact:true}).click();
+ await expect(page.getByText('Settings saved durably at revision 8. Automatic answers remain stopped.')).toBeVisible();
+ const save=calls.find(c=>c.path==='/api/v1/settings');
+ expect(save?.body).toEqual({generation_mode:'paid_test',generation_model:'openai/gpt-4.1-mini',decider_model:initial.decider_model,decider_mode:'shadow',timeout_seconds:30,max_retries:0});
+ expect(calls.some(c=>c.path==='/api/v1/controls/automation')).toBe(false);
+ await expect(page.getByText('Spent: USD 0.0023492',{exact:true})).toBeVisible();
+ await expect(page.getByText('Remaining: USD 0.2476508',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:/reset budget|top.up/i})).toHaveCount(0);
+ await expect(page.getByText('Paid development test mode',{exact:true})).toBeVisible();
+ await page.setViewportSize({width:375,height:1000});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBe(0);
+ await page.screenshot({path:'evidence/paid-ui-settings-mobile.png',fullPage:true});
 });

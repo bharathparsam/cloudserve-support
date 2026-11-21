@@ -1708,3 +1708,16 @@ dialog label {
 .bundled-dataset-panel {
   margin-block-end: 24px;
 }
+
+.ticket-form .paid-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  cursor: pointer;
+}
+.ticket-form .paid-consent input[type="checkbox"] {
+  width: 1.25rem;
+  min-height: 1.25rem;
+  flex: 0 0 1.25rem;
+  margin-top: .2rem;
+}

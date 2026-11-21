@@ -538,6 +538,13 @@ export default function App() {
           </button>
         </div>
         <main id="main" tabIndex={-1}>
+          {status?.generation_mode === "paid_test" && (
+            <div className="alert warning">
+              <strong>Paid development test mode</strong> · {status?.provider?.configured_model}
+              <p>Shared budget: USD {status?.paid_budget?.limit_usd ?? "unavailable"}; remaining USD {status?.paid_budget?.remaining_usd ?? "unavailable"}. No paid fallback or budget reset.
+                {status?.paid_budget?.blocked ? " Paid requests are blocked; inspect Settings." : " Every answer still requires all checks."}</p>
+            </div>
+          )}
           <div className="page-heading">
             <div>
               <div className="eyebrow">CLOUDSERVE / OPERATIONS</div>
@@ -725,7 +732,7 @@ export default function App() {
                           : "Decider policy unavailable — cannot authorize release"}
                   </p>
                   <p className="small wrap">
-                    {status?.provider?.model ?? "OpenRouter free model"}
+                    {status?.provider?.configured_model ?? status?.provider?.model ?? "Model not configured"}
                   </p>
                   {(status?.issues ?? []).map((issue: string) => (
                     <div className="setup-issue" key={issue}>
@@ -930,8 +937,9 @@ export default function App() {
                   </li>
                 </ol>
                 <div className="mini-notice">
-                  Missing OpenRouter key? Local classification, retrieval, and
-                  handoffs still run. Live generation remains unavailable.
+                  {status?.provider?.status === "missing_key"
+                    ? "OpenRouter key missing. Local classification, retrieval and handoffs still run; generation is unavailable."
+                    : "Generation uses the selected model. Provider failures, low confidence or insufficient sources produce an explicit handoff."}
                 </div>
               </aside>
             </div>
@@ -1825,7 +1833,7 @@ export default function App() {
             <p>
               {control?.enabled
                 ? "Stopping persists a new control epoch. In-flight tickets cannot release after a stop/re-enable cycle."
-                : "Re-enabling requires frozen assets and successful free-provider preflight. It does not revive drafts affected by a previous stop."}
+                : "Re-enabling requires frozen assets, verified model access and an available budget in paid-test mode. It does not revive drafts affected by a previous stop."}
             </p>
             <label>
               Operator reason
@@ -2020,6 +2028,7 @@ export default function App() {
 
 type ApiRequest = (path: string, options?: RequestInit) => Promise<any>;
 type OperatorValues = {
+  generation_mode: "free_only" | "paid_test";
   generation_model: string;
   decider_model: string;
   decider_mode: "disabled" | "shadow" | "enforce";
@@ -2046,11 +2055,14 @@ function OperatorSettingsPanel({
     [notice, setNotice] = useState(""),
     [loading, setLoading] = useState(false),
     [saving, setSaving] = useState(false),
-    [discovering, setDiscovering] = useState(false);
+    [discovering, setDiscovering] = useState(false),
+    [paidAcknowledged, setPaidAcknowledged] = useState(false);
   const errorRef = useRef<HTMLDivElement>(null);
   function accept(data: Obj) {
     setSaved(data);
+    setPaidAcknowledged(false);
     setValues({
+      generation_mode: data.generation_mode ?? "free_only",
       generation_model: data.generation_model,
       decider_model: data.decider_model,
       decider_mode: data.decider_mode,
@@ -2102,6 +2114,11 @@ function OperatorSettingsPanel({
     setNotice("");
     setError("");
     if (!values) return;
+    if (values.generation_mode === "paid_test" && !paidAcknowledged) {
+      setError("Acknowledge paid development testing before saving.");
+      errorRef.current?.focus();
+      return;
+    }
     if (automationEnabled) {
       setError("Stop automatic answers before saving settings.");
       return;
@@ -2140,13 +2157,21 @@ function OperatorSettingsPanel({
     setError("");
     setNotice("");
   }
+  function changeGenerationMode(mode: "free_only" | "paid_test") {
+    if (!values) return;
+    setValues({ ...values, generation_mode: mode,
+      generation_model: mode === "paid_test" ? "openai/gpt-4.1-mini" :
+        (saved?.generation_model?.endsWith(":free") ? saved.generation_model : "google/gemma-4-26b-a4b-it:free"),
+      max_retries: mode === "paid_test" ? "0" : "2" });
+    setPaidAcknowledged(false);setError("");setNotice("");
+  }
   return (
     <div className="new-grid">
       <section className="panel">
         <div className="panel-heading">
           <div>
             <h2 id="operator-settings-heading">Runtime settings</h2>
-            <p>Free models only · no automatic paid fallback</p>
+            <p>Explicit model policy · no automatic paid fallback</p>
           </div>
           <Settings2 size={20} aria-hidden />
         </div>
@@ -2154,7 +2179,7 @@ function OperatorSettingsPanel({
           <p className="small muted">
             Stop automatic answers and wait for every queued or running batch to
             finish before saving. A change invalidates the final evaluation
-            freeze. Free price/capability verification is required before
+            freeze. Price/capability and budget verification is required before
             settings are accepted.
           </p>
           {!token ? (
@@ -2187,9 +2212,29 @@ function OperatorSettingsPanel({
               action="/api/v1/settings"
               onSubmit={save}
             >
+              <label htmlFor="generation-mode">Generation mode
+                <select id="generation-mode" name="generation_mode" value={values.generation_mode}
+                  onChange={(e) => changeGenerationMode(e.target.value as "free_only" | "paid_test")}>
+                  <option value="free_only">Free-only</option>
+                  <option value="paid_test">Paid development test</option>
+                </select>
+              </label>
+              {values.generation_mode === "paid_test" && (
+                <div className="alert warning">
+                  <p>Paid requests use the shared USD {saved?.paid_budget?.limit_usd ?? "0.25"} development allowance, including prior use. There is no automatic top-up or reset. Maximum retries are zero.</p>
+                  <label className="paid-consent"><input type="checkbox" name="paid_acknowledged" required checked={paidAcknowledged}
+                    onChange={(e) => setPaidAcknowledged(e.target.checked)} />I acknowledge paid development testing within the shared USD0.25 cap.</label>
+                </div>
+              )}
               <label htmlFor="generation-model">
-                Generation model — free ID required
-                <input
+                {values.generation_mode === "paid_test" ? "Paid generation model" : "Generation model — free ID required"}
+                {values.generation_mode === "paid_test" ? (
+                  <select id="generation-model" name="generation_model" value={values.generation_model}
+                    onChange={(e) => change("generation_model",e.target.value)}>
+                    <option value="openai/gpt-4.1-mini">GPT-4.1 Mini</option>
+                    <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+                  </select>
+                ) : <input
                   id="generation-model"
                   name="generation_model"
                   value={values.generation_model}
@@ -2201,7 +2246,7 @@ function OperatorSettingsPanel({
                   autoCorrect="off"
                   spellCheck={false}
                   aria-describedby="model-help"
-                />
+                />}
               </label>
               <datalist id="generation-model-choices">
                 {catalog?.generation?.map((m: Obj) => (
@@ -2235,8 +2280,7 @@ function OperatorSettingsPanel({
               </datalist>
               <p className="field-help" id="model-help">
                 Choose a discovered model or enter a :free ID manually. Unknown
-                or nonzero pricing prevents saving. Discovery and verification
-                inspect metadata; they do not prove inference quality.
+                pricing prevents saving. Free-only mode rejects paid routes; paid testing permits only the two bounded choices. Discovery and verification inspect metadata; they do not prove inference quality.
               </p>
               <button
                 className="button secondary"
@@ -2302,6 +2346,7 @@ function OperatorSettingsPanel({
                     required
                     min={0}
                     max={2}
+                    disabled={values.generation_mode === "paid_test"}
                     step={1}
                     inputMode="numeric"
                   />
@@ -2315,7 +2360,7 @@ function OperatorSettingsPanel({
               )}
               <div className="form-footer">
                 <span>
-                  Saving requires no active batch and a free-only preflight.
+                  Saving requires no active batch and the selected model policy preflight.
                 </span>
                 <button
                   className="button primary"
@@ -2334,6 +2379,19 @@ function OperatorSettingsPanel({
           <h2>Persisted configuration</h2>
           <ShieldCheck size={20} aria-hidden />
         </div>
+        <div className="readiness-row">
+          <span>Generation mode</span><Badge>{human(saved?.generation_mode ?? "free_only")}</Badge>
+        </div>
+        {saved?.paid_budget && (
+          <div className="panel-body">
+            <h3>Shared paid-test budget</h3>
+            <p>Limit: USD {saved.paid_budget.limit_usd}</p>
+            <p>Spent: USD {saved.paid_budget.spent_usd ?? "unavailable"}</p>
+            <p>Reserved: USD {saved.paid_budget.reserved_usd ?? "unavailable"}</p>
+            <p>Remaining: USD {saved.paid_budget.remaining_usd ?? "unavailable"}</p>
+            <p>{saved.paid_budget.blocked ? `Blocked: ${human(saved.paid_budget.reason)}` : "Persists across tickets and restarts. No reset or top-up."}</p>
+          </div>
+        )}
         <div className="readiness-row">
           <span>Settings revision</span>
           <Badge>{saved?.revision ?? "Unavailable"}</Badge>
@@ -2423,7 +2481,7 @@ function BundledDatasetPanel({
     }
     if (!automationEnabled) {
       setError(
-        "Enable automatic answers explicitly before launching a bundled development run. Free-provider preflight and all release checks still apply.",
+        "Enable automatic answers explicitly before launching a bundled development run. Provider and budget preflight plus all release checks still apply.",
       );
       return;
     }

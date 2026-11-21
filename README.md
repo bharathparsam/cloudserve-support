@@ -30,7 +30,7 @@ Open `.env` locally and set `OPENROUTER_API_KEY`. Keep the generated operator to
 | `DECIDER_MODEL`, `DECIDER_MODE` | Optional observer; `shadow` or `disabled` for ordinary testing |
 | `MODEL_TIMEOUT_SECONDS`, `MODEL_MAX_RETRIES` | Request limits; defaults: 30 seconds and 2 retries |
 
-Model settings can be saved in the UI; saved settings survive restarts and override environment defaults. Normal operation remains free-only. Paid development tests require explicit authorization and a separate capped test command; see the [operations guide](docs/OPERATIONS_GUIDE.md).
+Model settings can be saved in the UI; saved settings survive restarts and override environment defaults. Free-only is the default. **Paid development test** mode in Settings supports the two approved OpenAI models with a shared USD0.25 cap across tickets and restarts, including prior usage. It never switches to a paid fallback. See the [operations guide](docs/OPERATIONS_GUIDE.md).
 
 ## 3. Add development tickets (optional)
 
@@ -59,7 +59,7 @@ First startup may take several minutes to download and load the embedding model.
 
 ## 5. Process tickets
 
-1. Connect the operator and review **Settings** while automatic answers are stopped.
+1. Connect the operator and review **Settings** while automatic answers are stopped. Choose **Free-only** or the explicitly acknowledged **Paid development test** mode, then save.
 2. Explicitly enable automatic answers.
 3. Use **New ticket**, or **Runs & evaluation** to select the first five development tickets or upload JSON.
 4. Inspect the answer or handoff, sources and blocking checks in **Ticket queue**.

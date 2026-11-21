@@ -8,7 +8,7 @@ Run commands from the application root. See [README](../README.md) for installat
 
 Operator mutations and original ticket access require the bearer token. The console holds it only in page memory. Ports bind to localhost. This application does not implement multi-tenant production identity or send customer messages.
 
-Saved model settings override environment defaults and persist in SQLite. Saving requires stopped automation, an idle batch and verified free pricing/capability. Decider can be disabled or run in shadow mode; enforced release requires reviewed calibration. Catalog verification establishes prices and capabilities, not inference availability or sufficient quota.
+Saved model settings override environment defaults and persist in SQLite. Saving requires stopped automation, an idle batch and verified pricing/capability for the selected mode. Decider can be disabled or run in shadow mode; enforced release requires reviewed calibration. Catalog verification establishes prices and capabilities, not inference availability or sufficient quota.
 
 ## Tickets and batches
 
@@ -36,7 +36,9 @@ These commands enforce the current freeze, model, quota and operator controls. T
 
 ## Explicit paid development test
 
-Normal runtime stays free-only. A separately authorized development test permits one selected ticket through the same workflow with GPT-4.1 Mini or GPT-4o Mini. Its adapter verifies price ceilings, reserves a conservative cost bound, allows three requests with no retries, and caps the entire test at USD0.25. Tools, web search and paid fallback are disabled. Each additional test budget requires explicit authorization.
+Free-only is the default. For authorized UI testing, select **Paid development test** in Settings, choose GPT-4.1 Mini or GPT-4o Mini, acknowledge the cost and save with zero retries. Its persistent SQLite ledger shares one USD0.25 cap across tickets, model changes and restarts, including earlier paid-test charges. There is no reset or top-up control. Exhausted or uncertain budgets block further paid requests; all answer gates still apply.
+
+A separate explicitly authorized command-line test also permits one selected ticket through the same workflow with GPT-4.1 Mini or GPT-4o Mini. Its adapter verifies price ceilings, reserves a conservative cost bound, allows three requests with no retries, and caps the entire test at USD0.25. Tools, web search and paid fallback are disabled. Each additional test budget requires explicit authorization.
 
 ```bash
 docker compose exec -T app python -m scripts.paid_answer_smoke --authorize-paid-test --model openai/gpt-4.1-mini --budget-usd 0.25 --output /app/storage/live-answer/new-paid-test
@@ -61,6 +63,6 @@ docker compose run --rm --no-deps app python -m pytest tests/ -q
 
 For frontend build/browser checks, follow the README. CI uses synthetic providers without live keys or validation; those passes do not establish live model quality. Linux arm64 has been exercised locally; the amd64 dependency lock is present but its image still needs verification.
 
-Known development limitations include urgency accuracy of41%, restrictive retrieval coverage, repeated templates across training/calibration, and weak generalization to novel short questions. Decider probabilities are not CloudServe-calibrated. One authorized paid development example passed all11 release checks at reported costUSD0.0023492, taking15.216s; that does not establish the3s latency or general quality targets. Independent reviews and final supplied validation remain outstanding.
+Known development limitations include urgency accuracy of41%, restrictive retrieval coverage, repeated templates across training/calibration, and weak generalization to novel short questions. Decider probabilities are not CloudServe-calibrated. Paid development examples have passed all11 release checks through normal UI submissions. Two verified UI requests took12.504s and9.060s; the project-wide paid-test ledger reportedUSD0.0078024 including earlier tests. These observations do not establish the3s latency or general quality targets. Independent reviews and final supplied validation remain outstanding.
 
 Generated evidence and internal notes are preserved locally but ignored by Git. Reports, video and original workbooks remain separate human-owned submission work.

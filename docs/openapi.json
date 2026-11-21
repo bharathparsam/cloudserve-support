@@ -943,6 +943,15 @@
             "maximum": 2.0,
             "minimum": 0.0,
             "title": "Max Retries"
+          },
+          "generation_mode": {
+            "type": "string",
+            "enum": [
+              "free_only",
+              "paid_test"
+            ],
+            "title": "Generation Mode",
+            "default": "free_only"
           }
         },
         "additionalProperties": false,
