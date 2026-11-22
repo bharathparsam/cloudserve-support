@@ -155,6 +155,10 @@ class Retriever:
             }
 
     def search(self, text, k=4):
+        # Empty/unavailable queries must not expose the previous ticket's hits or
+        # similarity metadata through the diagnostics/audit interface.
+        self.last_candidates = []
+        self.last_query_metadata = {"status": "not_searched", "truncated": False}
         if not self.ready or not text.strip():
             return []
         e = encode_queries(self.model, [text])

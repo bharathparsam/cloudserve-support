@@ -82,6 +82,15 @@ class FixtureProvider:
                 claims=[GuardrailResult(name="c1", status="pass", claim_ids=["c1"])],
                 instruction_integrity="pass",
                 tone_scope="pass",
+                answer_relevance="pass",
+                evidence=[
+                    SourceEvidence(
+                        claim_id="c1",
+                        doc_id="DOC-TEST",
+                        chunk_id="chunk-test",
+                        quote="Use exponential backoff when receiving HTTP 429.",
+                    )
+                ],
             )
         raise ValueError("Unexpected schema")
 

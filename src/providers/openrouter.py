@@ -47,6 +47,7 @@ class OpenRouterProvider:
         "last_call_id",
         "last_task",
         "last_call_status",
+        "schema_error_types",
     )
 
     def __init__(
@@ -81,12 +82,26 @@ class OpenRouterProvider:
             "catalog_verified": False,
             "reasoning_policy": self.reasoning_policy,
             "status": "missing_key" if not api_key else "not_preflighted",
-            "prompt_versions": {"PR-03": "1.4", "PR-04": "1.2", "PR-05": "1.2"},
+            "prompt_versions": self._prompt_versions(),
             "request_attempts": 0,
             "successful_http_responses": 0,
             "successful_calls": 0,
             "calls": 0,
         }
+
+    @staticmethod
+    def _prompt_versions():
+        versions = {}
+        for name in ("PR-03", "PR-04", "PR-05"):
+            path = (
+                Path(__file__).resolve().parents[2] / "prompts/build" / (name + ".txt")
+            )
+            try:
+                match = re.match(re.escape(name) + r" v([0-9.]+)\b", path.read_text())
+                versions[name] = match.group(1) if match else "unavailable"
+            except OSError:
+                versions[name] = "unavailable"
+        return versions
 
     @staticmethod
     def _aliases(ids):
@@ -262,6 +277,7 @@ class OpenRouterProvider:
             last_error=None,
             last_http_status=None,
             last_call_status="pending",
+            call_request_attempts=0,
             status="request_pending",
         )
 
@@ -450,6 +466,7 @@ class OpenRouterProvider:
                     self._before_request(request)
                     self._pace()
                     self.metadata["request_attempts"] += 1
+                    self.metadata["call_request_attempts"] += 1
                     response = self.client.post(
                         "/chat/completions",
                         headers={"Authorization": "Bearer " + self.api_key},
@@ -565,7 +582,15 @@ class OpenRouterProvider:
                         raise ProviderUnavailable("Provider output empty")
                     try:
                         result = schema.model_validate_json(content)
-                    except (ValidationError, ValueError, TypeError):
+                    except (ValidationError, ValueError, TypeError) as error:
+                        if isinstance(error, ValidationError):
+                            self.metadata["schema_error_types"] = sorted(
+                                {
+                                    item["type"]
+                                    for item in error.errors(include_input=False)
+                                    if re.fullmatch(r"[a-z0-9_]+", item["type"])
+                                }
+                            )
                         self._failure("response_schema_invalid")
                         raise ProviderUnavailable(
                             "Provider structured output invalid"

@@ -48,6 +48,11 @@ def run(args):
     if "validation" in p.name.lower():
         raise ValueError("Training accepts development data only")
     raw = p.read_bytes()
+    # This build's authorized development artifact is fixed. Verify before JSON
+    # parsing so renaming a held-back input cannot bypass dataset isolation.
+    trusted_hash = "5a0d8912238ee9fde07b4b793bda4672261fbf3ab965bf3eb418ef6e87f95d78"
+    if hash_bytes(raw) != trusted_hash:
+        raise ValueError("Input does not match authorized development fingerprint")
     data = json.loads(raw)
     root = Path(args.output)
     root.mkdir(parents=True, exist_ok=True)

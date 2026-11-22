@@ -61,7 +61,9 @@ def render(draft):
     )
 
 
-def validate(provider, ticket, draft, sources, classification, route):
+def validate(
+    provider, ticket, draft, sources, classification, route, *, private_identifiers=()
+):
     checks = []
 
     def add(name, ok, reason):
@@ -91,7 +93,12 @@ def validate(provider, ticket, draft, sources, classification, route):
         not PII.search(text)
         and not ADDRESS.search(text)
         and not NAME.search(text)
-        and not re.search(r"\[(PRIVATE|IDENTITY|PERSON|SECRET|EMAIL|ADDRESS)\]", text),
+        and not re.search(r"\[(PRIVATE|IDENTITY|PERSON|SECRET|EMAIL|ADDRESS)\]", text)
+        and not any(
+            re.search(r"(?<!\w)" + re.escape(str(value)) + r"(?!\w)", text, re.I)
+            for value in private_identifiers
+            if value
+        ),
         "outbound_private_data",
     )
     add(
@@ -128,6 +135,22 @@ def validate(provider, ticket, draft, sources, classification, route):
         and max(s.score for s in sources) >= relevance,
         "confidence_or_policy_failed",
     )
+    if any(check.status != "pass" for check in checks):
+        # A local block is terminal. Never forward private or already unsafe
+        # candidate text to any hosted validator, including the writer's provider.
+        checks.extend(
+            GuardrailResult(
+                name=name, status="unknown", reasons=["local_precondition_blocked"]
+            )
+            for name in (
+                "grounding",
+                "source_quote_evidence",
+                "answer_relevance",
+                "semantic_instruction_integrity",
+                "semantic_tone_scope",
+            )
+        )
+        return checks
     try:
         # Exact full cited text; no unrelated retrieved passages can stand in for support.
         payload = {
@@ -145,7 +168,7 @@ def validate(provider, ticket, draft, sources, classification, route):
                 for c in draft.claims
             ],
         }
-        result = provider.complete("validate", payload, SemanticCheck, 500)
+        result = provider.complete("validate", payload, SemanticCheck, 1400)
         covered = {
             cid
             for check in result.claims
@@ -158,6 +181,31 @@ def validate(provider, ticket, draft, sources, classification, route):
             and all(c.status == "pass" and bool(c.claim_ids) for c in result.claims)
         )
         add("grounding", citation_ok and grounded, "claim_support_not_confirmed")
+        claim_index = {claim.claim_id: claim for claim in draft.claims}
+        quotes_verified = (
+            bool(draft.claims)
+            and all(
+                evidence.claim_id in claim_index
+                and (evidence.doc_id, evidence.chunk_id) in index
+                and (evidence.doc_id, evidence.chunk_id)
+                in {
+                    (citation.doc_id, citation.chunk_id)
+                    for citation in claim_index[evidence.claim_id].citations
+                }
+                and evidence.quote
+                in index[(evidence.doc_id, evidence.chunk_id)].content
+                for evidence in result.evidence
+            )
+            and {evidence.claim_id for evidence in result.evidence} == set(claim_index)
+        )
+        add(
+            "source_quote_evidence",
+            quotes_verified,
+            "exact_cited_support_quote_not_verified",
+        )
+        checks.append(
+            GuardrailResult(name="answer_relevance", status=result.answer_relevance)
+        )
         checks.append(
             GuardrailResult(
                 name="semantic_instruction_integrity",

@@ -12,10 +12,12 @@ SENSITIVE = {
     "unclear_request",
 }
 INJECTION = re.compile(
-    r"(?i)(ignore|disregard|override).{0,45}(instruction|prompt|policy|previous)|system\s*prompt|\bdeveloper\s*message|reveal.{0,20}(secret|password|key)|<\s*/?\s*(system|script)"
+    r"(?is)(ignore|disregard|override).{0,45}(instruction|prompt|policy|previous)|system\s*prompt|\bdeveloper\s*message|reveal.{0,20}(secret|password|key)|<\s*/?\s*(system|script)"
 )
 AUTHORITY = re.compile(
-    r"(?i)\b(refund|reimburse|compromis\w*|breach|hacked|guarantee|contractual)\b|\b(please|can you|could you|we need you to)\b.{0,35}\b(delete|reset|unlock|deploy|rollback|increase|change|cancel)\b"
+    r"(?is)\b(refund|reimburse|compromis\w*|breach|hacked|guarantee|contractual)\b|\b(please|can you|could you|we need you to)\b.{0,35}\b(delete|reset|unlock|deploy|rollback|increase|change|cancel)\b"
+    r"|\b(?:see|seeing|visible|exposed|leaked|shown|showing|displayed|unmasked|unredacted)\b.{0,35}\b(?:secrets?(?:[ _-]?values?)?|credentials?|api[ _-]?keys?|tokens?)\b.{0,70}\b(?:audit[ _-]?)?(?:logs?|trail)\b"
+    r"|\b(?:secrets?(?:[ _-]?values?)?|credentials?|api[ _-]?keys?|tokens?)\b.{0,50}\b(?:visible|exposed|leaked|shown|printed|unmasked|unredacted|plain[ -]?text)\b.{0,50}\b(?:audit[ _-]?)?(?:logs?|trail)\b"
 )
 
 

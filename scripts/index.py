@@ -8,6 +8,15 @@ from src.ingest import sanitize_text
 
 
 def run(a):
+    development_raw = Path(a.development).read_bytes()
+    split = json.loads(Path(a.models, "split-manifest.json").read_text())
+    trusted_hash = "5a0d8912238ee9fde07b4b793bda4672261fbf3ab965bf3eb418ef6e87f95d78"
+    if (
+        hashlib.sha256(development_raw).hexdigest() != trusted_hash
+        or split["data_hash"] != trusted_hash
+    ):
+        raise ValueError("Input does not match authorized development fingerprint")
+    dev = json.loads(development_raw)
     import chromadb
     from sentence_transformers import SentenceTransformer
 
@@ -15,10 +24,19 @@ def run(a):
     raw = corpus.read_bytes()
     docs = json.loads(raw)
     corpus_hash = hashlib.sha256(raw).hexdigest()
-    model = SentenceTransformer(MODEL, revision=a.revision, device="cpu")
+    snapshot = (
+        Path(a.cache)
+        / "hub"
+        / ("models--" + MODEL.replace("/", "--"))
+        / "snapshots"
+        / a.revision
+    )
+    if not snapshot.is_dir():
+        raise RuntimeError(
+            "Pinned local embedding snapshot required; prepare cache explicitly"
+        )
+    model = SentenceTransformer(str(snapshot), device="cpu", local_files_only=True)
     model.max_seq_length = 256
-    dev = json.loads(Path(a.development).read_text())
-    split = json.loads(Path(a.models, "split-manifest.json").read_text())
     rows = [dev[i] for i in split["calibration"]]
     texts = [
         sanitize_text(
@@ -171,4 +189,5 @@ if __name__ == "__main__":
     p.add_argument("--chroma", default="storage/chroma")
     p.add_argument("--policy", default="policies/routing.json")
     p.add_argument("--revision", default=REVISION)
+    p.add_argument("--cache", default="storage/cache/huggingface")
     run(p.parse_args())

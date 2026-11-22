@@ -1,17 +1,18 @@
 {
-  "artifact_id": "5abc031bacf5c02642efd62b0ce7df611e429d26e6b9215b4530327e8d3d4dbe",
-  "created_at": "2026-11-19T07:12:18.326010+00:00",
+  "artifact_id": "be1d47b0db8aaed40dfcba98db2bb6b536dcec5598d2661f3f9099e6bd3cdd4b",
+  "created_at": "2026-11-21T16:35:51.483936+00:00",
   "data_hash": "5a0d8912238ee9fde07b4b793bda4672261fbf3ab965bf3eb418ef6e87f95d78",
   "seed": 42,
   "sklearn": "1.9.1",
   "python": "3.12.13",
-  "features": "sanitized subject + body only",
-  "calibration": "sigmoid; disjoint calibration subset; FrozenEstimator",
+  "features": "intent: sanitized full/subject/body fitting views, per-record balanced TF-IDF word/char logistic regression; urgency retained original",
+  "calibration": "intent sigmoid fitted on disjoint calibration text views; urgency original sigmoid; reliability measured not guaranteed",
   "files": {
-    "intent.joblib": "b97c257ad1f1d113825726ddfef62bb83a8d45a481d29c2c249f0b59e5505b40",
+    "intent.joblib": "e98a646000195133ef2ed6bdc853eb23023acd43f3881be35f311c74d7bf7001",
     "urgency.joblib": "045b3e315907b8d29ac6eac8ad0b5ad02e58eaba9e38c0df132337aa6f1f6f79"
   },
   "split_manifest_hash": "498a008f3405430446786a874126393a4eadffa98de03ec77b4609529415ea52",
   "sanitizer_implementation_hash": "12c7e9ef8351425b9c0bef678f7ff5504782e46cdf9cd251289cf082e42a0466",
-  "input_processing": "src.ingest.sanitize_text(subject + newline + body, [customer_name, customer_id]); explicit subject/body-only features"
+  "input_processing": "src.ingest.sanitize_text(subject + newline + body, [customer_name, customer_id]); explicit subject/body-only features",
+  "development_check_reused": true
 }

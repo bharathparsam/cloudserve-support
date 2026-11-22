@@ -116,10 +116,19 @@ class GuardrailResult(StrictModel):
     claim_ids: list[str] = []
 
 
+class SourceEvidence(StrictModel):
+    claim_id: str
+    doc_id: str
+    chunk_id: str
+    quote: str = Field(min_length=5, max_length=240)
+
+
 class SemanticCheck(StrictModel):
     claims: list[GuardrailResult]
     instruction_integrity: Literal["pass", "fail", "unknown"]
     tone_scope: Literal["pass", "fail", "unknown"]
+    answer_relevance: Literal["pass", "fail", "unknown"]
+    evidence: list[SourceEvidence] = Field(max_length=20)
 
 
 class RouteDecision(StrictModel):

@@ -9,5 +9,5 @@ def draft(provider, ticket, sources):
             "sources": [s.model_dump() for s in sources],
         },
         AnswerDraft,
-        700,
+        1400,
     )

@@ -1,9 +1,9 @@
 {
-  "version": "development-1",
+  "version": "development-3-exposure-safety",
   "calibration_ready": true,
   "enabled": true,
-  "intent_threshold": 0.20123100052281578,
-  "confidence_threshold": 0.20123100052281578,
+  "intent_threshold": 0.294118899316217,
+  "confidence_threshold": 0.294118899316217,
   "urgency_threshold": 0.0,
   "retrieval_floor": 0.5888271927833557,
   "retrieval_ready": true,
@@ -55,11 +55,15 @@
     "split": "calibration",
     "minimum_global_sample": 10,
     "minimum_global_precision": 0.9,
+    "minimum_per_intent_sample": 2,
     "selected_count": 100,
     "selected_intent_accuracy": 1.0,
-    "minimum_per_intent_sample": 2,
-    "limitation": "Small per-intent calibration samples; not a quality guarantee"
+    "selection_unit": "original record; worst confidence and correctness across verbatim full/subject/body views",
+    "previous_intent_threshold": 0.20123100052281578,
+    "threshold_not_lowered": true,
+    "limitation": "Correlated development templates; reused check diagnostics; not semantic quality or confidence-reliability guarantee"
   },
   "relevance_floor": 0.5888271927833557,
-  "corpus_hash": "6622c2bd291b375437ea472959f81d106978f0ecfb9e3bb7eb40d3a9b8d3c038"
+  "corpus_hash": "6622c2bd291b375437ea472959f81d106978f0ecfb9e3bb7eb40d3a9b8d3c038",
+  "override_rules_version": "explicit-credential-exposure-1"
 }

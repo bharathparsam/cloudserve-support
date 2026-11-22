@@ -650,6 +650,37 @@
     "title": "GuardrailResult",
     "type": "object"
   },
+  "SourceEvidence": {
+    "additionalProperties": false,
+    "properties": {
+      "claim_id": {
+        "title": "Claim Id",
+        "type": "string"
+      },
+      "doc_id": {
+        "title": "Doc Id",
+        "type": "string"
+      },
+      "chunk_id": {
+        "title": "Chunk Id",
+        "type": "string"
+      },
+      "quote": {
+        "maxLength": 240,
+        "minLength": 5,
+        "title": "Quote",
+        "type": "string"
+      }
+    },
+    "required": [
+      "claim_id",
+      "doc_id",
+      "chunk_id",
+      "quote"
+    ],
+    "title": "SourceEvidence",
+    "type": "object"
+  },
   "SemanticCheck": {
     "$defs": {
       "GuardrailResult": {
@@ -697,6 +728,37 @@
         ],
         "title": "GuardrailResult",
         "type": "object"
+      },
+      "SourceEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "quote": {
+            "maxLength": 240,
+            "minLength": 5,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_id",
+          "doc_id",
+          "chunk_id",
+          "quote"
+        ],
+        "title": "SourceEvidence",
+        "type": "object"
       }
     },
     "additionalProperties": false,
@@ -725,12 +787,31 @@
         ],
         "title": "Tone Scope",
         "type": "string"
+      },
+      "answer_relevance": {
+        "enum": [
+          "pass",
+          "fail",
+          "unknown"
+        ],
+        "title": "Answer Relevance",
+        "type": "string"
+      },
+      "evidence": {
+        "items": {
+          "$ref": "#/$defs/SourceEvidence"
+        },
+        "maxItems": 20,
+        "title": "Evidence",
+        "type": "array"
       }
     },
     "required": [
       "claims",
       "instruction_integrity",
-      "tone_scope"
+      "tone_scope",
+      "answer_relevance",
+      "evidence"
     ],
     "title": "SemanticCheck",
     "type": "object"
