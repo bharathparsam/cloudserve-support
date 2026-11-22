@@ -212,9 +212,36 @@ class PipelineService:
                 },
             )
             return {"assessment": a}
+        classification = s["classification"]
+        if classification.status != "ok" or (
+            classification.intent is not None
+            and classification.intent.label in route.SENSITIVE
+        ):
+            reason = (
+                "classification_unavailable"
+                if classification.status != "ok"
+                else "mandatory_sensitive_intent"
+            )
+            assessment = Assessment(decision="escalate", reasons=[reason])
+            self.event(
+                s,
+                "sensitivity",
+                {
+                    "status": "not_called",
+                    "reason": reason,
+                    "assessment": assessment.model_dump(),
+                    "provider": {
+                        "cost_policy": "not_applicable",
+                        "status": "not_called",
+                        "request_attempts": 0,
+                    },
+                    "provenance": s["provenance"],
+                },
+            )
+            return {"assessment": assessment}
         cache_key = digest(
             {
-                "cache_type": "generation-sensitivity-v2",
+                "cache_type": "generation-sensitivity-v3",
                 "text": t.subject + "\n" + t.body,
                 "schema": 1,
                 "params": {
@@ -270,8 +297,21 @@ class PipelineService:
                 )
             except Exception:
                 a = Assessment(decision="unknown", reasons=["provider_unavailable"])
-            provider_metadata = json.loads(
-                json.dumps(getattr(self.provider, "metadata", {}), default=str)
+            local_assessment = bool(
+                guardrails.INJECTION.search(t.subject + "\n" + t.body)
+                or guardrails.AUTHORITY.search(t.subject + "\n" + t.body)
+            )
+            provider_metadata = (
+                {
+                    "cost_policy": "not_applicable",
+                    "status": "not_called",
+                    "reason": "deterministic_local_assessment",
+                    "request_attempts": 0,
+                }
+                if local_assessment
+                else json.loads(
+                    json.dumps(getattr(self.provider, "metadata", {}), default=str)
+                )
             )
             if a.decision != "unknown":
                 self.store.cache_put(

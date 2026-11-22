@@ -86,7 +86,7 @@ def test_paid_save_applies_to_same_api_pipeline_and_restart(
         assert r.status_code == 200
         assert (
             r.json()["generation_mode"] == "paid_test"
-            and r.json()["paid_budget"]["limit_usd"] == "0.25"
+            and r.json()["paid_budget"]["limit_usd"] == "3.50"
         )
         status = c.get("/api/v1/status").json()
         assert (
@@ -107,8 +107,8 @@ def test_paid_save_applies_to_same_api_pipeline_and_restart(
 def test_budget_depletion_prevents_enable_before_any_provider_request(fixture_runtime):
     s, store, pipeline = fixture_runtime
     provider, _ = build_providers(s, PAID)
-    provider.ledger.reserve("spent", Decimal(".25"))
-    provider.ledger.settle("spent", Decimal(".25"))
+    provider.ledger.reserve("spent", Decimal("3.50"))
+    provider.ledger.settle("spent", Decimal("3.50"))
     pipeline.provider = provider
     s.generation_mode = "paid_test"
     s.model = PAID["generation_model"]

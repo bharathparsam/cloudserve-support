@@ -14,6 +14,7 @@ from .openrouter import OpenRouterProvider, ProviderUnavailable, FreePolicyError
 
 class PaidTestProvider(OpenRouterProvider):
     allowed_models = {
+        "openai/gpt-4.1": (Decimal("0.000002"), Decimal("0.000008")),
         "openai/gpt-4.1-mini": (Decimal("0.0000004"), Decimal("0.0000016")),
         "openai/gpt-4o-mini": (Decimal("0.00000015"), Decimal("0.0000006")),
     }
@@ -25,7 +26,7 @@ class PaidTestProvider(OpenRouterProvider):
         self,
         api_key,
         model="openai/gpt-4.1-mini",
-        budget_usd=Decimal(".25"),
+        budget_usd=Decimal("3.50"),
         timeout=30,
         max_retries=0,
     ):
@@ -36,9 +37,9 @@ class PaidTestProvider(OpenRouterProvider):
         if (
             isinstance(budget_usd, bool)
             or not budget.is_finite()
-            or not 0 < budget <= Decimal(".25")
+            or not 0 < budget <= Decimal("3.50")
         ):
-            raise ValueError("Paid test budget must be positive and at most USD 0.25")
+            raise ValueError("Paid test budget must be positive and at most USD 3.50")
         if (
             model not in self.allowed_models
             or isinstance(max_retries, bool)
@@ -58,8 +59,69 @@ class PaidTestProvider(OpenRouterProvider):
             cost_policy="paid_test_only",
             test_only=True,
             max_paid_requests=self.maximum_requests,
+            pacing_policy="serialized_paid_no_free_tier_sleep_v1",
         )
         self._budget_metadata()
+
+    def verify_credit(self, required_usd):
+        """Read current account/key allowance; return no balances or credentials."""
+        checked = datetime.now(timezone.utc).isoformat()
+        result = {
+            "verified": False,
+            "sufficient": False,
+            "checked_at": checked,
+            "reason": "account_credit_unavailable",
+        }
+        try:
+            required = Decimal(str(required_usd))
+            if (
+                isinstance(required_usd, bool)
+                or not required.is_finite()
+                or required <= 0
+            ):
+                raise ValueError()
+            if not self.api_key:
+                raise ValueError()
+            headers = {"Authorization": "Bearer " + self.api_key}
+            response = self.client.get("/credits", headers=headers)
+            response.raise_for_status()
+            credits = response.json()["data"]
+
+            def amount(value):
+                number = Decimal(str(value))
+                if isinstance(value, bool) or not number.is_finite() or number < 0:
+                    raise ValueError()
+                return number
+
+            remaining = amount(credits["total_credits"]) - amount(
+                credits["total_usage"]
+            )
+            if remaining < 0:
+                raise ValueError()
+            response = self.client.get("/key", headers=headers)
+            response.raise_for_status()
+            key = response.json()["data"]
+            # Missing limit is unknown; explicit null means uncapped key.
+            if "limit" not in key:
+                raise ValueError()
+            if key["limit"] is not None:
+                amount(key["limit"])
+                remaining = min(remaining, amount(key["limit_remaining"]))
+            result.update(
+                verified=True,
+                sufficient=remaining >= required,
+                reason=None if remaining >= required else "account_credit_insufficient",
+            )
+        except Exception:
+            pass
+        self.metadata["account_credit_verification"] = dict(result)
+        return result
+
+    def _pace(self):
+        # The 20/min free-tier throttle does not apply to this explicit paid
+        # mode. Calls remain serialized, capped, reserved, and never retried.
+        # Never mutate OpenRouterProvider's shared free-tier pacing clock.
+        return None
 
     def _budget_metadata(self):
         self.metadata.update(
@@ -217,6 +279,11 @@ class PaidTestProvider(OpenRouterProvider):
             )
         )
 
+    def _reset_call(self, task):
+        super()._reset_call(task)
+        self.metadata.pop("reservation_bound", None)
+        self.metadata.pop("last_reserved_cost_usd", None)
+
     def _before_request(self, request):
         if self._paid_requests >= self.maximum_requests:
             self._failure("paid_test_request_limit")
@@ -249,6 +316,21 @@ class PaidTestProvider(OpenRouterProvider):
         self._unreported_reservations += reservation
         self._paid_requests += 1
         self.metadata["last_reserved_cost_usd"] = str(reservation)
+        self.metadata["reservation_bound"] = {
+            "version": "bounded-paid-request-v1",
+            "model": self.model,
+            "request_bytes": size,
+            "max_tokens": request["max_tokens"],
+            "framing_token_allowance": self.framing_token_allowance,
+            "max_retries": 0,
+            "prompt_price": str(self._rates[0]),
+            "completion_price": str(self._rates[1]),
+            "pricing_verified": self._verified
+            and self.metadata.get("catalog_verified") is True,
+            "optional_capabilities_disabled": True,
+            "catalog_hash": self.metadata.get("catalog_hash"),
+        }
+
         self._budget_metadata()
 
     def _paid_cost_failure(self, code):

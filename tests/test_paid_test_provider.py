@@ -93,7 +93,7 @@ def call(p):
     return p.complete("assess", {"ticket": "development fixture"}, Assessment, 200)
 
 
-@pytest.mark.parametrize("budget", [0, -1, True, "NaN", "Infinity", ".250001"])
+@pytest.mark.parametrize("budget", [0, -1, True, "NaN", "Infinity", "3.500001"])
 def test_budget_strictly_bounded(budget):
     with pytest.raises(ValueError):
         PaidTestProvider("fixture", budget_usd=budget)
@@ -235,3 +235,89 @@ def test_oversize_request_and_optional_capabilities_blocked():
     with pytest.raises(ProviderUnavailable):
         p._before_request({"model": MODEL, "messages": ["x" * 262145], "max_tokens": 1})
     assert all(r.method == "GET" for r in calls)
+
+
+def test_paid_pacing_never_sleeps_or_changes_free_tier_clock(monkeypatch):
+    import src.providers.openrouter as base
+
+    marker = base.OpenRouterProvider._last_attempt
+
+    def forbidden(_):
+        raise AssertionError("Paid adapter must not use free-tier sleep")
+
+    monkeypatch.setattr(base.time, "sleep", forbidden)
+    p = PaidTestProvider("fixture", budget_usd=Decimal("3.50"))
+    p._pace()
+    p._pace()
+    assert base.OpenRouterProvider._last_attempt == marker
+    assert p.metadata["pacing_policy"] == "serialized_paid_no_free_tier_sleep_v1"
+    assert p.budget_usd == Decimal("3.50")
+
+
+@pytest.mark.parametrize(
+    "credit,key,required,verified,sufficient",
+    [
+        ({"total_credits": 4, "total_usage": 0.1}, {"limit": None}, "3.5", True, True),
+        (
+            {"total_credits": 4, "total_usage": 0.1},
+            {"limit": 1, "limit_remaining": ".2"},
+            ".3",
+            True,
+            False,
+        ),
+        (
+            {"total_credits": 4, "total_usage": 0.1},
+            {"limit": 1, "limit_remaining": ".3"},
+            ".3",
+            True,
+            True,
+        ),
+        ({"total_credits": 4, "total_usage": 0.1}, {}, ".3", False, False),
+        (
+            {"total_credits": "NaN", "total_usage": 0},
+            {"limit": None},
+            ".3",
+            False,
+            False,
+        ),
+        ({"total_credits": 4, "total_usage": 0.1}, {"limit": 1}, ".3", False, False),
+        ({"total_credits": 4, "total_usage": 0.1}, {"limit": None}, True, False, False),
+    ],
+)
+def test_account_credit_check_never_reports_balances_or_keys(
+    credit, key, required, verified, sufficient
+):
+    p = PaidTestProvider("private-fixture-key")
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200, json={"data": credit if request.url.path.endswith("/credits") else key}
+        )
+
+    p.client.close()
+    p.client = httpx.Client(
+        base_url="https://openrouter.ai/api/v1", transport=httpx.MockTransport(handler)
+    )
+    result = p.verify_credit(required)
+    assert result["verified"] == verified and result["sufficient"] == sufficient
+    assert set(result) == {"verified", "sufficient", "checked_at", "reason"}
+    assert all(r.method == "GET" for r in requests)
+    assert "private-fixture-key" not in json.dumps(p.metadata)
+    assert not {"total_credits", "total_usage", "limit_remaining"} & result.keys()
+
+
+def test_credit_network_failure_is_unknown_with_no_raw_error():
+    p = PaidTestProvider("fixture")
+
+    def failure(request):
+        raise httpx.ConnectError("private error", request=request)
+
+    p.client.close()
+    p.client = httpx.Client(
+        base_url="https://openrouter.ai/api/v1", transport=httpx.MockTransport(failure)
+    )
+    result = p.verify_credit(Decimal(".1"))
+    assert not result["verified"] and not result["sufficient"]
+    assert "private error" not in json.dumps(p.metadata)

@@ -24,11 +24,11 @@ class LedgerFixture:
     def snapshot(self):
         reserved = sum(self.reservations.values(), Decimal(0))
         return {
-            "limit_usd": "0.25",
+            "limit_usd": "3.50",
             "spent_usd": str(self.spent),
             "reserved_usd": str(reserved),
             "remaining_usd": str(
-                max(Decimal(0), Decimal(".25") - self.spent - reserved)
+                max(Decimal(0), Decimal("3.50") - self.spent - reserved)
             ),
             "blocked": self.reason is not None,
             "reason": self.reason,
@@ -37,7 +37,7 @@ class LedgerFixture:
     def reserve(self, key, value):
         if self.reason or self.spent + sum(
             self.reservations.values(), Decimal(0)
-        ) + value > Decimal(".25"):
+        ) + value > Decimal("3.50"):
             raise RuntimeError("fixture budget unavailable")
         self.reservations[key] = value
         return self.snapshot()
@@ -159,7 +159,7 @@ def test_three_call_record_limit_new_record_does_not_replenish_budget(monkeypatc
 
 def test_insufficient_durable_budget_denies_before_post(monkeypatch):
     p, ledger, posts, _ = fixture(monkeypatch)
-    ledger.spent = Decimal(".2499999")
+    ledger.spent = Decimal("3.4999999")
     with pytest.raises(ProviderUnavailable):
         call(p)
     assert not posts and not ledger.reservations
@@ -319,8 +319,8 @@ def test_real_ledger_budget_failures_survive_all_mirrors_without_http(
     if state == "blocked":
         ledger.block("test_budget_blocked")
     else:
-        ledger.reserve("exhaustion-test", Decimal(".25"))
-        ledger.settle("exhaustion-test", Decimal(".25"))
+        ledger.reserve("exhaustion-test", Decimal("3.50"))
+        ledger.settle("exhaustion-test", Decimal("3.50"))
     p = BudgetedPaidProvider("fixture", MODEL, store)
     p.begin_record("record")
     for action in (p.preflight, lambda: call(p)):
@@ -360,3 +360,14 @@ def test_snapshot_failure_survives_subsequent_metadata_copy(monkeypatch):
     assert p._inner.metadata["last_error"] == "paid_budget_unavailable"
     assert not posts and not gets
     assert "private database details" not in json.dumps(p.metadata)
+
+
+def test_optional_record_subcap_never_replenishes_shared_ledger(monkeypatch):
+    _, ledger, posts, _ = fixture(monkeypatch)
+    p = BudgetedPaidProvider("fixture", MODEL, object(), budget_usd=Decimal(".000001"))
+    p.begin_record("one")
+    with pytest.raises(ProviderUnavailable):
+        call(p)
+    assert not posts and ledger.spent == Decimal(".0023492") and not ledger.reservations
+    assert p._inner.budget_usd == Decimal(".000001")
+    assert p.metadata["paid_budget"]["limit_usd"] == "3.50"

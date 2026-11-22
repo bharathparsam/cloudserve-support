@@ -69,7 +69,10 @@ class Settings:
 
     @property
     def chroma_path(self):
-        return Path(os.getenv("CHROMA_PATH", str(self.storage / "chroma")))
+        return Path(
+            getattr(self, "chroma_override", None)
+            or os.getenv("CHROMA_PATH", str(self.storage / "chroma"))
+        )
 
     @property
     def policy_path(self):

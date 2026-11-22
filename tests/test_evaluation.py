@@ -2,6 +2,7 @@ import csv, json
 from pathlib import Path
 import pytest
 from src.metrics import calculate
+from src.ingest import digest
 from evaluation.harness import (
     enrich_metrics,
     calibration_bands,
@@ -251,6 +252,9 @@ def test_final_fixture_clears_prior_assessment_cache(tmp_path):
         "configured_model": "fixture",
         "configured_artifacts": configured_fingerprint(s),
     }
+    frozen["protocol_hash"] = digest(
+        {k: v for k, v in frozen.items() if k != "protocol_hash"}
+    )
     (s.storage / "freeze.json").write_text(json.dumps(frozen))
     checked = {
         "code_hash": frozen["code_hash"],
@@ -261,6 +265,7 @@ def test_final_fixture_clears_prior_assessment_cache(tmp_path):
         "timestamp": now(),
         "record_budget": 1,
     }
+    checked["freeze_protocol_hash"] = frozen["protocol_hash"]
     (s.storage / "preflight.json").write_text(json.dumps(checked))
     store.cache_put("old-development", {"decision": "clear"})
     path = tmp_path / "synthetic-test.json"
@@ -415,7 +420,11 @@ def test_final_gate_rejects_changed_overridden_policy_before_input(
         "timestamp": now(),
         "record_budget": 1,
     }
+    frozen["protocol_hash"] = digest(
+        {k: v for k, v in frozen.items() if k != "protocol_hash"}
+    )
     (settings.storage / "freeze.json").write_text(json.dumps(frozen))
+    checked["freeze_protocol_hash"] = frozen["protocol_hash"]
     (settings.storage / "preflight.json").write_text(json.dumps(checked))
     policy.write_text('{"changed":true}')
     with pytest.raises(RuntimeError, match="Configured runtime assets"):

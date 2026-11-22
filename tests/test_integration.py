@@ -416,3 +416,72 @@ def test_provider_final_error_metrics_use_persisted_status(fixture_runtime):
     result = prometheus_text(store)
     assert 'cloudserve_provider_errors{class="429"} 1' in result
     assert "cloudserve_provider_retries 2" in result
+
+
+def test_local_safety_assessment_never_records_an_idle_paid_call(fixture_runtime):
+    store, pipeline = enable_fixture(fixture_runtime)
+    pipeline.provider.metadata = {
+        "fixture": True,
+        "cost_policy": "paid_test_only",
+        "request_attempts": 0,
+        "last_call_id": None,
+        "usage": None,
+    }
+    original = {"channel": "chat", "body": "Please refund this invoice."}
+    run_id = store.create_run([original])
+    job = store.claim_job(run_id=run_id)
+    result = pipeline.process(original, run_id, job["record_id"], 0)
+    assert result.action == "escalate"
+    event = next(
+        e
+        for e in store.events(run_id=run_id, limit=100)["items"]
+        if e["stage"] == "sensitivity"
+    )
+    assert event["data"]["provider"] == {
+        "cost_policy": "not_applicable",
+        "status": "not_called",
+        "reason": "deterministic_local_assessment",
+        "request_attempts": 0,
+    }
+
+
+def test_mandatory_sensitive_class_never_spends_on_unnecessary_clearance(
+    fixture_runtime,
+):
+    store, pipeline = enable_fixture(fixture_runtime)
+
+    class SensitiveClassifier(FixtureClassifier):
+        def predict(self, text):
+            result = super().predict(text)
+            return result.model_copy(
+                update={
+                    "intent": Dimension(
+                        label="security_incident",
+                        raw_probabilities={"security_incident": 1.0},
+                        raw_probability=1.0,
+                        calibrated_probability=1.0,
+                    )
+                }
+            )
+
+    class MustNotCall(FixtureProvider):
+        def complete(self, *args, **kwargs):
+            raise AssertionError("A mandatory handoff needs no hosted model")
+
+    pipeline.classifier = SensitiveClassifier()
+    pipeline.provider = MustNotCall()
+    original = {
+        "channel": "email",
+        "body": "A security concern needs specialist investigation.",
+    }
+    rid = store.create_run([original])
+    job = store.claim_job(run_id=rid)
+    outcome = pipeline.process(original, rid, job["record_id"], 0)
+    assert outcome.action == "escalate"
+    sensitivity = next(
+        e
+        for e in store.events(run_id=rid, limit=100)["items"]
+        if e["stage"] == "sensitivity"
+    )
+    assert sensitivity["data"]["reason"] == "mandatory_sensitive_intent"
+    assert sensitivity["data"]["provider"]["cost_policy"] == "not_applicable"

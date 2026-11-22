@@ -3,6 +3,7 @@
 from __future__ import annotations
 import argparse, csv, json, os, platform, time, hashlib
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from src.ingest import load_records, digest, now
 from src.metrics import calculate
@@ -15,17 +16,16 @@ HASH_PATHS = (
     "assets/models",
     "assets/corpus",
     "scripts",
-    "frontend/src",
     "tests",
     "requirements.txt",
     "requirements-linux-arm64.txt",
     "requirements-linux-amd64.txt",
     "pyproject.toml",
-    "Dockerfile",
-    ".dockerignore",
+    "logging.json",
+    "monitoring",
+    ".github/workflows",
+    ".env.example",
     "compose.yaml",
-    "frontend/package.json",
-    "frontend/package-lock.json",
 )
 
 
@@ -73,7 +73,6 @@ def configured_fingerprint(settings):
     for name in ("index-manifest.json", "passages.json", "passage-embeddings.npy"):
         files["retrieval/" + name] = file_entry(settings.corpus_path.parent / name)
     files["policy"] = file_entry(settings.policy_path)
-    files["decider_policy"] = file_entry(settings.decider_policy_path)
     manifest_path = settings.corpus_path.parent / "index-manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
     model = "sentence-transformers/all-MiniLM-L6-v2"
@@ -133,8 +132,8 @@ def configured_fingerprint(settings):
             "reasoning_policy": "disable_if_catalog_explicitly_optional_v1",
             "temperature": 0,
             "assessment_max_tokens": 500,
-            "draft_max_tokens": 700,
-            "validation_max_tokens": 500,
+            "draft_max_tokens": 1400,
+            "validation_max_tokens": 1400,
             "schema_version": 1,
         },
     }
@@ -142,10 +141,158 @@ def configured_fingerprint(settings):
     return {"sha256": digest(result), "details": result}
 
 
-def final_gate(settings, store, pipeline):
-    if getattr(settings, "generation_cost_policy", "free_only") != "free_only":
+PAID_SCOPE = "development_and_supplied_validation"
+PAID_DEVIATION = (
+    "Explicit user-authorized paid evaluation departs from original free-only specification NFR-07. "
+    "It is never reported as free-model acceptance or a guaranteed quality/latency target pass."
+)
+
+
+def frozen_body_boundary(settings):
+    path = settings.storage / "freeze.json"
+    if not path.is_file():
+        return None
+    value = json.loads(path.read_text()).get("short_long_body_character_boundary")
+    if value is not None and (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not __import__("math").isfinite(value)
+        or value < 0
+    ):
+        raise RuntimeError("Frozen body-length boundary invalid")
+    return value
+
+
+def paid_authorization(store, provider=None):
+    ledger = getattr(provider, "ledger", None)
+    if ledger is None:
+        from src.paid_budget import BudgetLedger
+
+        ledger = BudgetLedger(store)
+    read = getattr(ledger, "authorization", None)
+    if read is None:
+        raise RuntimeError("Durable scoped paid evaluation authorization unavailable")
+    raw = read()
+    auth = {
+        "authorization_id": raw.get("authorization_id"),
+        "scope": raw.get("authorization_scope"),
+        "limit_usd": raw.get("authorized_limit_usd"),
+        "applied_at": raw.get("authorization_created_at"),
+    }
+    if (
+        not isinstance(auth, dict)
+        or auth.get("scope") != PAID_SCOPE
+        or not auth.get("authorization_id")
+        or not auth.get("applied_at")
+    ):
         raise RuntimeError(
-            "Paid test authorization applies only to development; supplied validation remains free-only"
+            "Durable authorization does not cover paid supplied validation"
+        )
+    try:
+        cap = Decimal(str(auth.get("limit_usd")))
+        if not cap.is_finite() or cap <= 0 or cap > Decimal("3.50"):
+            raise ValueError()
+    except (InvalidOperation, ValueError, TypeError):
+        raise RuntimeError("Authorized paid cap invalid") from None
+    stable = {
+        key: auth[key]
+        for key in ("authorization_id", "scope", "limit_usd", "applied_at")
+    }
+    if raw.get("timeout_accounting_policy") is not None:
+        stable["timeout_accounting_policy"] = raw["timeout_accounting_policy"]
+    return {"sha256": digest(stable), "details": stable, "budget": ledger.snapshot()}
+
+
+def credit_reserve_with_holds(required, budget):
+    """Credit may still include unreported timeout charges; reserve them too."""
+    try:
+        held = Decimal(str(budget.get("held_unknown_usd", "0")))
+        if not held.is_finite() or held < 0:
+            raise ValueError()
+        return required + held
+    except (InvalidOperation, ValueError, TypeError):
+        raise RuntimeError("Durable held-unknown reserve is invalid") from None
+
+
+def _checked_protocol(freeze, preflight):
+    core = {k: v for k, v in freeze.items() if k != "protocol_hash"}
+    if not freeze.get("protocol_hash") or freeze["protocol_hash"] != digest(core):
+        raise RuntimeError("Freeze protocol fingerprint invalid")
+    if preflight.get("freeze_protocol_hash") != freeze["protocol_hash"]:
+        raise RuntimeError("Preflight does not cover this exact frozen protocol")
+
+
+def paid_development_gate(settings, store, pipeline, authorized=False):
+    if not authorized:
+        raise RuntimeError(
+            "Paid development batch requires explicit evaluation authorization"
+        )
+    path = settings.storage / "preflight.json"
+    if not path.is_file():
+        raise RuntimeError("Paid development batch requires smoke and budget preflight")
+    preflight = json.loads(path.read_text())
+    if (
+        preflight.get("code_hash") != tree_hash(settings.root)
+        or preflight.get("configured_artifacts", {}).get("sha256")
+        != configured_fingerprint(settings)["sha256"]
+    ):
+        raise RuntimeError("Paid development preflight source/configuration changed")
+    if preflight.get("scope") != "development" or not preflight.get(
+        "paid_evaluation_authorized"
+    ):
+        raise RuntimeError("Development-scoped paid preflight required")
+    stamp = datetime.fromisoformat(preflight["timestamp"])
+    if not 0 <= (datetime.now(timezone.utc) - stamp).total_seconds() <= 3600:
+        raise RuntimeError("Paid preflight expired")
+    auth = paid_authorization(store, pipeline.provider)
+    if auth["sha256"] != preflight.get("paid_authorization", {}).get("sha256") or auth[
+        "budget"
+    ].get("blocked"):
+        raise RuntimeError("Paid development authorization or budget invalid")
+    try:
+        required = Decimal(str(preflight["estimated_reserve_usd"]))
+        if (
+            not required.is_finite()
+            or required <= 0
+            or Decimal(auth["budget"]["remaining_usd"]) < required
+        ):
+            raise ValueError()
+    except (KeyError, ValueError, TypeError, InvalidOperation):
+        raise RuntimeError("Paid development reserve unavailable") from None
+    if not preflight.get("paid_budget_sufficient") or not preflight.get(
+        "smoke", {}
+    ).get("verified"):
+        raise RuntimeError(
+            "Completed paid development smoke and reserve evidence required"
+        )
+    if not store.control()["enabled"]:
+        raise RuntimeError("Operator must explicitly enable automation")
+    if preflight.get("configured_model") != pipeline.provider.model:
+        raise RuntimeError("Paid development model differs from preflight")
+    if not (
+        pipeline.classifier.ready
+        and pipeline.retriever.ready
+        and pipeline.policy.get("calibration_ready")
+        and pipeline.policy.get("retrieval_ready")
+    ):
+        raise RuntimeError("Paid development assets unavailable")
+    credit = pipeline.provider.verify_credit(
+        credit_reserve_with_holds(required, auth["budget"])
+    )
+    if (
+        not pipeline.provider.preflight().get("verified")
+        or not credit.get("verified")
+        or not credit.get("sufficient")
+    ):
+        raise RuntimeError("Current paid provider/key credit verification failed")
+    return preflight
+
+
+def final_gate(settings, store, pipeline, authorize_paid_evaluation=False):
+    paid = getattr(settings, "generation_cost_policy", "free_only") != "free_only"
+    if paid and not authorize_paid_evaluation:
+        raise RuntimeError(
+            "Paid authorization applies only to development without explicit paid evaluation authorization"
         )
     frozen = settings.storage / "freeze.json"
     checked = settings.storage / "preflight.json"
@@ -155,6 +302,7 @@ def final_gate(settings, store, pipeline):
         )
     freeze = json.loads(frozen.read_text())
     preflight = json.loads(checked.read_text())
+    _checked_protocol(freeze, preflight)
     if freeze.get("code_hash") != tree_hash(settings.root):
         raise RuntimeError("Code or frozen assets changed after freeze")
     current = configured_fingerprint(settings)
@@ -166,15 +314,62 @@ def final_gate(settings, store, pipeline):
         raise RuntimeError("Preflight does not match configured runtime assets")
     if preflight.get("code_hash") != freeze["code_hash"]:
         raise RuntimeError("Preflight must cover the frozen code and artifacts")
-    if not preflight.get("quota_sufficient") or not preflight.get("provider", {}).get(
-        "verified"
-    ):
+    if not preflight.get("provider", {}).get("verified"):
+        raise RuntimeError("Verified current provider preflight required")
+    if paid:
+        if preflight.get("scope") != "supplied_validation" or not preflight.get(
+            "smoke", {}
+        ).get("verified"):
+            raise RuntimeError(
+                "Final paid preflight requires development smoke evidence"
+            )
+        if not freeze.get("paid_evaluation_authorized") or not preflight.get(
+            "paid_evaluation_authorized"
+        ):
+            raise RuntimeError(
+                "Explicit paid authorization missing from freeze/preflight"
+            )
+        auth = paid_authorization(store, pipeline.provider)
+        for record in (freeze, preflight):
+            if record.get("paid_authorization", {}).get("sha256") != auth["sha256"]:
+                raise RuntimeError(
+                    "Durable paid authorization changed after freeze/preflight"
+                )
+        if auth["budget"].get("blocked") or not preflight.get("paid_budget_sufficient"):
+            raise RuntimeError("Verified durable paid evaluation budget unavailable")
+        try:
+            required = Decimal(str(preflight["estimated_reserve_usd"]))
+            remaining = Decimal(str(auth["budget"]["remaining_usd"]))
+            if (
+                not required.is_finite()
+                or required <= 0
+                or not remaining.is_finite()
+                or remaining < required
+            ):
+                raise ValueError()
+        except (KeyError, InvalidOperation, TypeError, ValueError):
+            raise RuntimeError(
+                "Current paid budget cannot cover the empirical evaluation reserve"
+            ) from None
+        verify_credit = getattr(pipeline.provider, "verify_credit", None)
+        credit = (
+            verify_credit(credit_reserve_with_holds(required, auth["budget"]))
+            if verify_credit
+            else {}
+        )
+        if not credit.get("verified") or not credit.get("sufficient"):
+            raise RuntimeError("Current account/key credit verification failed")
+    elif not preflight.get("quota_sufficient"):
         raise RuntimeError(
             "Verified sufficient free quota required before final validation"
         )
     if (
-        datetime.now(timezone.utc) - datetime.fromisoformat(preflight["timestamp"])
-    ).total_seconds() > 3600:
+        not 0
+        <= (
+            datetime.now(timezone.utc) - datetime.fromisoformat(preflight["timestamp"])
+        ).total_seconds()
+        <= 3600
+    ):
         raise RuntimeError("Final preflight is older than one hour")
     if not store.control()["enabled"]:
         raise RuntimeError(
@@ -191,35 +386,25 @@ def final_gate(settings, store, pipeline):
         and pipeline.policy.get("retrieval_ready")
     ):
         raise RuntimeError("Frozen model/retrieval/policy readiness required")
-    if getattr(pipeline, "decider_mode", "disabled") == "enforce":
-        if not pipeline.evaluator or not pipeline.evaluator.policy_ready:
-            raise RuntimeError(
-                "Reviewed Decider calibration policy required for enforced final evaluation"
-            )
-        decider_check = pipeline.evaluator.provider.preflight()
-        if not decider_check.get("verified"):
-            raise RuntimeError("Decider free provider verification failed")
     fresh = pipeline.provider.preflight()
     if not fresh.get("verified"):
         raise RuntimeError("Current provider session verification failed")
     return preflight
 
 
-def run(input_path, output_path, runtime=None, kind="development"):
+def run(
+    input_path,
+    output_path,
+    runtime=None,
+    kind="development",
+    authorize_paid_evaluation=False,
+):
     output = Path(output_path)
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError("Output directory must be empty; retain prior evidence")
     from src.runtime import create_runtime
 
-    settings, store, pipeline = runtime or create_runtime()
-    preflight = (
-        final_gate(settings, store, pipeline) if kind == "supplied_validation" else None
-    )
-    # Do not open supplied input until final freeze/quota/control gates pass.
-    records = load_records(input_path)
-    if preflight and preflight.get("record_budget", 0) < len(records):
-        raise RuntimeError("Preflight record budget is smaller than supplied input")
-    output.mkdir(parents=True, exist_ok=True)
+    settings, store, pipeline = runtime or create_runtime(isolated_index=True)
     from filelock import FileLock, Timeout
 
     pipeline_lock = FileLock(str(settings.storage / "pipeline.lock"))
@@ -229,6 +414,27 @@ def run(input_path, output_path, runtime=None, kind="development"):
         raise RuntimeError(
             "Pipeline is busy; wait for active ticket processing before evaluation"
         )
+    try:
+        preflight = (
+            final_gate(settings, store, pipeline, authorize_paid_evaluation)
+            if kind == "supplied_validation"
+            else (
+                paid_development_gate(
+                    settings, store, pipeline, authorize_paid_evaluation
+                )
+                if kind in ("development", "batch")
+                and getattr(settings, "generation_cost_policy", "free_only")
+                != "free_only"
+                else None
+            )
+        )
+        records = load_records(input_path)
+        if preflight and preflight.get("record_budget", 0) < len(records):
+            raise RuntimeError("Preflight record budget is smaller than supplied input")
+        output.mkdir(parents=True, exist_ok=True)
+    except BaseException:
+        pipeline_lock.release()
+        raise
     lock_path = settings.storage / "evaluation.lock"
     try:
         fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -262,6 +468,20 @@ def run(input_path, output_path, runtime=None, kind="development"):
         "cache_policy": "fresh isolated model_cache before supplied_validation; versioned sensitivity cache otherwise, reuse explicitly recorded",
         "provider": pipeline.provider.metadata,
         "state": "incomplete",
+        "generation_cost_policy": getattr(
+            settings, "generation_cost_policy", "free_only"
+        ),
+        "paid_evaluation_authorized": bool(
+            authorize_paid_evaluation
+            and preflight
+            and preflight.get("paid_evaluation_authorized")
+        ),
+        "specification_deviation": (
+            PAID_DEVIATION
+            if getattr(settings, "generation_cost_policy", "free_only") != "free_only"
+            else None
+        ),
+        "evaluation_preflight": preflight,
         "human_review_sampling": "first 50 generated answers by ascending input position; two independent blank sheets",
         "historical_times_used_for_latency": False,
         "short_long_body_character_boundary": frozen_protocol.get(
@@ -312,6 +532,16 @@ def run(input_path, output_path, runtime=None, kind="development"):
                 provider=pipeline.provider.metadata,
             )
             metrics = calculate(outcomes, len(records))
+            if getattr(settings, "generation_cost_policy", "free_only") != "free_only":
+                try:
+                    manifest["paid_budget_at_completion"] = (
+                        pipeline.provider.ledger.snapshot()
+                    )
+                except Exception:
+                    manifest["paid_budget_at_completion"] = {
+                        "blocked": True,
+                        "reason": "budget_unavailable",
+                    }
             manifest["reconciliation"] = metrics["counts"]
             (output / "outcomes.jsonl").write_text(
                 "".join(json.dumps(x, ensure_ascii=False) + "\n" for x in outcomes)
@@ -659,11 +889,22 @@ def main():
     p.add_argument("--output", required=True)
     p.add_argument(
         "--kind",
-        default="supplied_validation",
-        choices=["development", "supplied_validation"],
+        default="batch",
+        choices=["batch", "development", "supplied_validation"],
+        help="Ordinary path-based batch by default; supplied_validation applies the frozen final-evaluation protocol",
+    )
+    p.add_argument(
+        "--authorize-paid-evaluation",
+        action="store_true",
+        help="Explicitly permit the frozen user-authorized paid evaluation exception",
     )
     args = p.parse_args()
-    manifest, metrics = run(args.input, args.output, kind=args.kind)
+    manifest, metrics = run(
+        args.input,
+        args.output,
+        kind=args.kind,
+        authorize_paid_evaluation=args.authorize_paid_evaluation,
+    )
     print(
         json.dumps(
             {

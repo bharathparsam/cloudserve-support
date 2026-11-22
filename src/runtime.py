@@ -17,8 +17,10 @@ def apply_operator_values(settings, values):
     settings.generation_cost_policy = (
         "paid_test_only" if settings.generation_mode == "paid_test" else "free_only"
     )
+    from .paid_budget import LIMIT
+
     settings.paid_test_budget_usd = (
-        "0.25" if settings.generation_mode == "paid_test" else None
+        str(LIMIT) if settings.generation_mode == "paid_test" else None
     )
     return settings
 
@@ -29,8 +31,17 @@ def load_configuration(settings, store=None):
     )
 
 
-def create_runtime(settings=None):
+def create_runtime(settings=None, *, isolated_index=False):
     settings = settings or Settings()
+    if isolated_index:
+        # Embedded Chroma native clients must never share writable index files
+        # across the API process and a standalone evaluator. Immutable corpus,
+        # embeddings, collection fingerprint and pipeline behavior stay shared.
+        import uuid
+
+        settings.chroma_override = (
+            settings.db_path.parent / "harness-index" / str(uuid.uuid4())
+        )
     store = Store(settings.db_path)
     values = read_operator_settings(settings, store)
     apply_operator_values(settings, values)

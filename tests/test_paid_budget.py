@@ -44,7 +44,7 @@ def test_three_historical_metadata_patterns_seed_exact_actual_once(tmp_path):
     ledger = BudgetLedger(s)
     state = ledger.snapshot()
     assert D(state["spent_usd"]) == D("0.0023492")
-    assert D(state["remaining_usd"]) == D("0.2476508") and not state["blocked"]
+    assert D(state["remaining_usd"]) == D("3.4976508") and not state["blocked"]
     assert BudgetLedger(Store(s.path)).snapshot()["spent_usd"] == state["spent_usd"]
     assert ledger.snapshot()["spent_usd"] == state["spent_usd"]
 
@@ -69,13 +69,13 @@ def test_different_records_and_instances_share_fixed_cap(tmp_path):
     s = store(tmp_path)
     a = BudgetLedger(s)
     b = BudgetLedger(Store(s.path))
-    a.reserve("record1-call", D(".15"))
-    b.reserve("record2-call", D(".10"))
+    a.reserve("record1-call", D("2.00"))
+    b.reserve("record2-call", D("1.50"))
     assert D(a.snapshot()["remaining_usd"]) == 0
     with pytest.raises(BudgetExceeded):
         b.reserve("record3-call", D(".000001"))
     assert not b.snapshot()["blocked"]
-    a.settle("record1-call", D(".05"))
+    a.settle("record1-call", D("1.90"))
     assert D(b.snapshot()["remaining_usd"]) == D(".10")
 
 
@@ -88,7 +88,7 @@ def test_atomic_concurrent_reservations_never_overspend(tmp_path):
         ledger = BudgetLedger(Store(s.path))
         barrier.wait()
         try:
-            ledger.reserve("parallel-" + str(i), D(".05"))
+            ledger.reserve("parallel-" + str(i), D(".70"))
             return True
         except BudgetExceeded:
             return False
@@ -96,7 +96,7 @@ def test_atomic_concurrent_reservations_never_overspend(tmp_path):
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(reserve, range(6)))
     assert sum(results) == 5 and D(BudgetLedger(s).snapshot()["reserved_usd"]) == D(
-        ".25"
+        "3.50"
     )
 
 
@@ -237,11 +237,11 @@ def test_block_reasons_are_generic_and_no_reset_or_topup_api(tmp_path):
 
 def test_historical_actual_above_total_cap_is_preserved_and_blocks(tmp_path):
     s = store(tmp_path)
-    paid_event(s, "generation", "model", "legacy", ".30001")
+    paid_event(s, "generation", "model", "legacy", "3.50001")
     snapshot = BudgetLedger(s).snapshot()
     assert (
         snapshot["blocked"]
-        and D(snapshot["spent_usd"]) == D(".30001")
+        and D(snapshot["spent_usd"]) == D("3.50001")
         and D(snapshot["remaining_usd"]) == 0
     )
 
@@ -299,20 +299,20 @@ def refusal_event(s, **changes):
 )
 def test_known_zero_post_refusal_is_not_an_unknown_paid_charge(tmp_path, error):
     s = store(tmp_path)
-    paid_event(s, "generation", "model", "legacy-paid", ".247")
+    paid_event(s, "generation", "model", "legacy-paid", "3.497")
     refusal_event(s, last_error=error)
     ledger = BudgetLedger(s)
     state = ledger.snapshot()
     assert (
         not state["blocked"]
-        and D(state["spent_usd"]) == D(".247")
+        and D(state["spent_usd"]) == D("3.497")
         and D(state["remaining_usd"]) == D(".003")
     )
     # A less expensive allowed model's estimate can still be admitted.
     ledger.reserve("cheaper-call", D(".002"))
     ledger.settle("cheaper-call", D(".001"))
     assert not BudgetLedger(Store(s.path)).snapshot()["blocked"]
-    assert D(ledger.snapshot()["spent_usd"]) == D(".248")
+    assert D(ledger.snapshot()["spent_usd"]) == D("3.498")
 
 
 @pytest.mark.parametrize("attempts", [None, 1, False, "0", 0.0, -1])
@@ -364,3 +364,235 @@ def test_zero_post_catalog_refusal_without_call_id_is_provably_unbilled(tmp_path
         s, last_call_id=None, last_error="preflight_unavailable", paid_request_count=0
     )
     assert not BudgetLedger(s).snapshot()["blocked"]
+
+
+@pytest.mark.parametrize("blocked", [False, True])
+def test_authorized_legacy_limit_migration_preserves_all_liabilities_and_blocks(
+    tmp_path, blocked
+):
+    s = store(tmp_path)
+    ledger = BudgetLedger(s)
+    ledger.reserve("prior-pending", D(".04"))
+    ledger.reserve("prior-settled", D(".02"))
+    ledger.settle("prior-settled", D(".0078024"))
+    if blocked:
+        ledger.block("historical_unknown_charge")
+    with s.connection() as db:
+        db.execute("UPDATE paid_ui_budget SET limit_usd='0.25'")
+        db.execute("DELETE FROM paid_ui_budget_authorizations")
+    result = BudgetLedger(Store(s.path)).snapshot()
+    assert D(result["limit_usd"]) == D("3.50")
+    assert D(result["spent_usd"]) == D(".0078024")
+    assert D(result["reserved_usd"]) == D(".04")
+    assert result["blocked"] == blocked
+    if blocked:
+        assert result["reason"] == "historical_unknown_charge"
+    with s.connection() as db:
+        rows = db.execute("SELECT * FROM paid_ui_budget_authorizations").fetchall()
+        assert (
+            len(rows) == 1
+            and rows[0]["version"] == "paid-development-validation-cap-3.50-v1"
+        )
+        assert D(rows[0]["previous_limit_usd"]) == D(".25")
+        assert D(rows[0]["new_limit_usd"]) == D("3.50")
+        stamp = rows[0]["applied_at"]
+    BudgetLedger(Store(s.path)).snapshot()
+    with s.connection() as db:
+        assert (
+            db.execute(
+                "SELECT applied_at FROM paid_ui_budget_authorizations"
+            ).fetchone()[0]
+            == stamp
+        )
+
+
+def test_unknown_stored_limit_still_blocks_instead_of_silently_migrating(tmp_path):
+    s = store(tmp_path)
+    ledger = BudgetLedger(s)
+    ledger.snapshot()
+    with s.connection() as db:
+        db.execute("UPDATE paid_ui_budget SET limit_usd='9.99'")
+    result = ledger.snapshot()
+    assert result["blocked"] and result["reason"] == "budget_state_invalid"
+
+
+def test_stable_explicit_authorization_does_not_change_with_spend_or_restart(tmp_path):
+    ledger = BudgetLedger(store(tmp_path))
+    first = ledger.authorization()
+    assert first["authorization_scope"] == "development_and_supplied_validation"
+    assert first["authorized_limit_usd"] == "3.50"
+    assert first["authorization_id"] == "paid-development-validation-cap-3.50-v1"
+    assert set(first) == {
+        "authorization_id",
+        "authorized_limit_usd",
+        "authorization_scope",
+        "authorization_created_at",
+    }
+    ledger.reserve("authorized-call", D(".01"))
+    ledger.settle("authorized-call", D(".001"))
+    assert BudgetLedger(Store(ledger.store.path)).authorization() == first
+
+
+def local_assessment_event(
+    s,
+    reason="sensitive_authority_request",
+    metadata_changes=None,
+    decision="escalate",
+    reasons_override=None,
+    stage="sensitivity",
+):
+    metadata = {
+        "cost_policy": "paid_test_only",
+        "request_attempts": 0,
+        "last_call_id": None,
+        "last_call_status": None,
+        "last_error": None,
+        "actual_model": None,
+        "actual_provider": None,
+        "response_id": None,
+        "usage": None,
+        "last_http_status": None,
+    }
+    metadata.update(metadata_changes or {})
+    data = {
+        "provider": metadata,
+        "assessment": {
+            "decision": decision,
+            "reasons": reasons_override if reasons_override is not None else [reason],
+        },
+    }
+    with s.connection() as db:
+        db.execute(
+            "INSERT INTO decision_events VALUES(?,?,?,?,?,?)",
+            (
+                str(__import__("uuid").uuid4()),
+                "2026-11-22T00:00:00+00:00",
+                None,
+                None,
+                stage,
+                json.dumps(data),
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "reason", ["sensitive_authority_request", "instruction_injection"]
+)
+def test_legacy_local_assessment_idle_metadata_is_unbilled_then_next_paid_request_works(
+    tmp_path, reason
+):
+    s = store(tmp_path)
+    ledger = BudgetLedger(s)
+    ledger.reserve("real-prior-call", D(".01"))
+    ledger.settle("real-prior-call", D(".002"))
+    local_assessment_event(s, reason=reason)
+    state = ledger.snapshot()
+    assert not state["blocked"] and D(state["spent_usd"]) == D(".002")
+    ledger.reserve("next-real-call", D(".01"))
+    ledger.settle("next-real-call", D(".003"))
+    restarted = BudgetLedger(Store(s.path)).snapshot()
+    assert (
+        not restarted["blocked"]
+        and D(restarted["spent_usd"]) == D(".005")
+        and D(restarted["reserved_usd"]) == 0
+    )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"decision": "unknown"},
+        {"reason": "provider_unavailable"},
+        {"reasons_override": []},
+        {"reasons_override": ["sensitive_authority_request", "unverified_provider"]},
+        {"stage": "validation"},
+        {"metadata_changes": {"request_attempts": 1}},
+        {"metadata_changes": {"request_attempts": False}},
+        {"metadata_changes": {"request_attempts": "0"}},
+        {"metadata_changes": {"request_attempts": None}},
+        {"metadata_changes": {"last_call_id": "unresolved-call"}},
+        {"metadata_changes": {"last_call_status": "pending"}},
+        {"metadata_changes": {"last_error": "network_timeout"}},
+        {"metadata_changes": {"last_http_status": 200}},
+        {"metadata_changes": {"response_id": "provider-response"}},
+        {"metadata_changes": {"actual_model": "openai/gpt-4o-mini"}},
+        {"metadata_changes": {"actual_provider": "OpenAI"}},
+        {"metadata_changes": {"usage": {"cost": None}}},
+    ],
+)
+def test_idle_local_assessment_requires_complete_strict_proof(tmp_path, changes):
+    s = store(tmp_path)
+    local_assessment_event(s, **changes)
+    assert BudgetLedger(s).snapshot()["blocked"]
+
+
+def test_generic_idle_paid_metadata_without_assessment_proof_remains_unknown(tmp_path):
+    s = store(tmp_path)
+    with s.connection() as db:
+        db.execute(
+            "INSERT INTO decision_events VALUES(?,?,?,?,?,?)",
+            (
+                str(__import__("uuid").uuid4()),
+                "2026-11-22T00:00:00+00:00",
+                None,
+                None,
+                "sensitivity",
+                json.dumps(
+                    {
+                        "provider": {
+                            "cost_policy": "paid_test_only",
+                            "request_attempts": 0,
+                        }
+                    }
+                ),
+            ),
+        )
+    assert BudgetLedger(s).snapshot()["blocked"]
+
+
+def test_later_pre_post_refusal_uses_strict_per_call_counter_without_forgetting_prior_cost(
+    tmp_path,
+):
+    s = store(tmp_path)
+    paid_event(s, "sensitivity", "provider", "known-assessment", ".001")
+    paid_event(s, "generation", "model", "known-draft", ".002")
+    refusal_event(
+        s,
+        request_attempts=2,
+        call_request_attempts=0,
+        last_error="preflight_unavailable",
+    )
+    ledger = BudgetLedger(s)
+    state = ledger.snapshot()
+    assert not state["blocked"] and D(state["spent_usd"]) == D(".003")
+    ledger.reserve("next-valid-request", D(".01"))
+    assert D(ledger.snapshot()["reserved_usd"]) == D(".01")
+
+
+@pytest.mark.parametrize("current", [1, 2, -1, False, "0", None, 0.0])
+def test_later_refusal_with_nonzero_or_invalid_per_call_attempts_remains_unknown(
+    tmp_path, current
+):
+    s = store(tmp_path)
+    refusal_event(
+        s,
+        request_attempts=2,
+        call_request_attempts=current,
+        last_error="preflight_unavailable",
+    )
+    assert BudgetLedger(s).snapshot()["blocked"]
+
+
+@pytest.mark.parametrize("total", [None, False, -1, "2", 2.0])
+def test_zero_per_call_refusal_still_requires_valid_record_counter(tmp_path, total):
+    s = store(tmp_path)
+    refusal_event(s, request_attempts=total, call_request_attempts=0)
+    assert BudgetLedger(s).snapshot()["blocked"]
+
+
+def test_legacy_positive_record_counter_without_per_call_proof_is_still_unknown(
+    tmp_path,
+):
+    s = store(tmp_path)
+    refusal_event(s, request_attempts=2, last_error="preflight_unavailable")
+    assert BudgetLedger(s).snapshot()["blocked"]

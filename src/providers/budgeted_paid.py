@@ -24,7 +24,14 @@ class _DurablePaidProvider(PaidTestProvider):
         super()._before_request(request)
         call_id = self.metadata["last_call_id"]
         try:
-            self.ledger.reserve(call_id, self._current_reservation)
+            if callable(getattr(self.ledger, "try_hold_timeout", None)):
+                self.ledger.reserve(
+                    call_id,
+                    self._current_reservation,
+                    bound_proof=self.metadata.get("reservation_bound"),
+                )
+            else:
+                self.ledger.reserve(call_id, self._current_reservation)
         except RuntimeError:
             self._failure("paid_budget_reservation_rejected")
             raise ProviderUnavailable("Durable paid test budget unavailable") from None
@@ -59,7 +66,7 @@ class _DurablePaidProvider(PaidTestProvider):
 
 
 class BudgetedPaidProvider:
-    """Paid UI adapter; every request reserves the same persistent total cap.
+    """Legacy paid adapter; every request reserves the same persistent total cap.
 
     ``begin_record`` starts only the three-call record allowance. It never
     releases reservations or changes the global budget.
@@ -67,9 +74,18 @@ class BudgetedPaidProvider:
 
     reasoning_policy = PaidTestProvider.reasoning_policy
 
-    def __init__(self, api_key, model, store, timeout=30, max_retries=0):
+    def __init__(
+        self,
+        api_key,
+        model,
+        store,
+        timeout=30,
+        max_retries=0,
+        budget_usd=Decimal("3.50"),
+    ):
         self.api_key, self.model = api_key, model
         self.timeout, self.max_retries = timeout, max_retries
+        self._record_budget_usd = budget_usd
         self.ledger = _new_ledger(store)
         self._lock = threading.RLock()
         self._record_id = None
@@ -81,6 +97,7 @@ class BudgetedPaidProvider:
         return _DurablePaidProvider(
             self.ledger,
             api_key=self.api_key,
+            budget_usd=self._record_budget_usd,
             model=self.model,
             timeout=self.timeout,
             max_retries=self.max_retries,
@@ -120,6 +137,12 @@ class BudgetedPaidProvider:
             self._inner.metadata["verified"] = False
             self._mirror()
             raise ProviderUnavailable("Durable paid test budget exhausted")
+
+    def verify_credit(self, required_usd):
+        with self._lock:
+            result = self._inner.verify_credit(required_usd)
+            self._mirror()
+            return result
 
     def begin_record(self, record_id):
         if not isinstance(record_id, str) or not record_id:
@@ -168,7 +191,19 @@ class BudgetedPaidProvider:
                     # Transport, unverified identity, malformed HTTP, or unknown
                     # usage may have charged: retain reservation and block.
                     try:
-                        self.ledger.block("paid_usage_unresolved")
+                        hold = getattr(self.ledger, "try_hold_timeout", None)
+                        held = bool(
+                            hold
+                            and hold(
+                                self._inner._reservation_id, dict(self._inner.metadata)
+                            )
+                        )
+                        if held:
+                            self._inner.metadata["paid_timeout_cost_status"] = (
+                                "unknown_full_reservation_held"
+                            )
+                        else:
+                            self.ledger.block("paid_usage_unresolved")
                     except RuntimeError:
                         self._inner._failure("paid_budget_unavailable")
                     self._inner._verified = False
