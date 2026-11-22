@@ -13,12 +13,9 @@ import os
 import re
 import uuid
 
-import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Literal
 
-from .decider import DeciderEvaluator
-from .providers.decider import DeciderProvider
 from .providers.openrouter import OpenRouterProvider
 
 
@@ -54,8 +51,8 @@ SNAPSHOT_FIELDS = {
 class OperatorSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
     generation_model: str = Field(max_length=200)
-    decider_model: str = Field(max_length=200)
-    decider_mode: Literal["disabled", "shadow", "enforce"]
+    decider_model: str = Field(default="legacy/disabled:free", max_length=200)
+    decider_mode: Literal["disabled"] = "disabled"
     timeout_seconds: float = Field(ge=5, le=120)
     max_retries: int = Field(ge=0, le=2)
     generation_mode: Literal["free_only", "paid_test"] = "free_only"
@@ -79,7 +76,7 @@ class OperatorSettings(BaseModel):
 
             if self.generation_model not in PaidTestProvider.allowed_models:
                 raise ValueError(
-                    "Paid development testing supports only GPT-4.1 Mini or GPT-4o Mini"
+                    "Paid development testing supports GPT-4.1, GPT-4.1 Mini or GPT-4o Mini"
                 )
             if self.max_retries != 0:
                 raise ValueError("Paid development testing requires zero retries")
@@ -190,11 +187,18 @@ def persist_operator_settings(store, values):
                 "SELECT revision,data FROM operator_settings WHERE id=1"
             ).fetchone()
             revision = previous["revision"] + 1 if previous else 1
-            before = (
-                OperatorSettings.model_validate_json(previous["data"]).model_dump()
-                if previous
-                else None
-            )
+            before = json.loads(previous["data"]) if previous else None
+            if before is not None:
+                # Preserve a legacy observer selection in the audit event while
+                # allowing an explicit switch to the simplified configuration.
+                # All other stored fields must still satisfy the current schema.
+                if before.get("decider_mode", "disabled") not in (
+                    "disabled",
+                    "shadow",
+                    "enforce",
+                ):
+                    raise ValueError("Invalid legacy observer configuration")
+                OperatorSettings.model_validate({**before, "decider_mode": "disabled"})
             encoded = json.dumps(payload, allow_nan=False, sort_keys=True)
             db.execute(
                 """INSERT INTO operator_settings(id,revision,data,updated_at) VALUES(1,?,?,?)
@@ -260,91 +264,4 @@ def build_providers(settings, values):
             max_retries=values.max_retries,
             free_only=True,
         )
-    if values.decider_mode == "disabled":
-        return generation, None
-    policy_path = settings.decider_policy_path
-    policy = (
-        json.loads(policy_path.read_text())
-        if policy_path.is_file()
-        else {"calibration_ready": False}
-    )
-    if not isinstance(policy, dict):
-        raise ValueError("Decider policy must be an object")
-    evaluator = DeciderEvaluator(
-        DeciderProvider(
-            api_key=settings.api_key,
-            model=values.decider_model,
-            timeout=values.timeout_seconds,
-            max_retries=values.max_retries,
-        ),
-        policy,
-    )
-    return generation, evaluator
-
-
-def discover_models(api_key):
-    """Read public live model candidates. Saving separately verifies endpoints.
-
-    At most two bounded catalog GETs. No inference, plugins, guessed prices,
-    account balance, local fixture, or cached replay is used for discovery.
-    """
-    headers = {"Authorization": "Bearer " + api_key} if api_key else {}
-    result = {
-        "generation": [],
-        "decider": [],
-        "source": "live_catalog",
-        "note": "Live catalog candidates with explicit zero prices. Save re-verifies provider endpoints; catalog listing does not prove live inference or quota.",
-    }
-    try:
-        with httpx.Client(
-            base_url="https://openrouter.ai", timeout=httpx.Timeout(10, connect=5)
-        ) as client:
-            for modality, field in (("text", "generation"), ("decisions", "decider")):
-                response = client.get(
-                    "/api/v1/models",
-                    params={"output_modalities": modality},
-                    headers=headers,
-                )
-                response.raise_for_status()
-                entries = response.json().get("data")
-                if not isinstance(entries, list):
-                    raise ValueError("Model catalog unavailable")
-                candidates = {}
-                for entry in entries:
-                    if not isinstance(entry, dict):
-                        continue
-                    model_id = entry.get("id")
-                    if (
-                        not isinstance(model_id, str)
-                        or len(model_id) > 200
-                        or not FREE_MODEL_ID.fullmatch(model_id)
-                    ):
-                        continue
-                    if not DeciderProvider._free(entry.get("pricing")):
-                        continue
-                    architecture = entry.get("architecture", {})
-                    if not isinstance(architecture, dict):
-                        continue
-                    inputs, outputs = architecture.get(
-                        "input_modalities"
-                    ), architecture.get("output_modalities")
-                    if (
-                        not isinstance(inputs, list)
-                        or not isinstance(outputs, list)
-                        or "text" not in inputs
-                        or modality not in outputs
-                    ):
-                        continue
-                    name = entry.get("name")
-                    candidates[model_id] = {
-                        "id": model_id,
-                        "name": (
-                            name[:200]
-                            if isinstance(name, str) and name.strip()
-                            else model_id
-                        ),
-                    }
-                result[field] = [candidates[k] for k in sorted(candidates)]
-        return result
-    except Exception:
-        raise OperatorSettingsUnavailable("Live model catalog is unavailable") from None
+    return generation, None

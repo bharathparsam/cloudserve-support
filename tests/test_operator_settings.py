@@ -18,7 +18,6 @@ from src.operator_settings import (
     OperatorSettingsConflict,
     OperatorSettingsUnavailable,
     build_providers,
-    discover_models,
     persist_operator_settings,
     read_operator_settings,
 )
@@ -28,7 +27,7 @@ def values(**changes):
     data = {
         "generation_model": "google/gemma-4-26b-a4b-it:free",
         "decider_model": "perplexity/pplx-decider-flash-v1.3:free",
-        "decider_mode": "shadow",
+        "decider_mode": "disabled",
         "timeout_seconds": 30.0,
         "max_retries": 2,
         "generation_mode": "free_only",
@@ -40,7 +39,7 @@ def settings(tmp_path):
     return SimpleNamespace(
         model=values()["generation_model"],
         decider_model=values()["decider_model"],
-        decider_mode="shadow",
+        decider_mode="disabled",
         api_key="synthetic-private-key",
         decider_policy_path=tmp_path / "decider.json",
     )
@@ -218,11 +217,6 @@ def test_disabled_decider_is_not_constructed_or_contacted(tmp_path, monkeypatch)
         return "generation"
 
     monkeypatch.setattr(module, "OpenRouterProvider", generation)
-    monkeypatch.setattr(
-        module,
-        "DeciderProvider",
-        lambda **kw: pytest.fail("Disabled Decider must not be contacted"),
-    )
     provider, evaluator = build_providers(
         settings(tmp_path), values(decider_mode="disabled")
     )
@@ -243,118 +237,18 @@ def test_provider_build_uses_persisted_snapshot_and_private_local_key(
         "OpenRouterProvider",
         lambda **kw: captured.append(("generation", kw)) or object(),
     )
-    monkeypatch.setattr(
-        module,
-        "DeciderProvider",
-        lambda **kw: captured.append(("decider", kw))
-        or SimpleNamespace(model=kw["model"], metadata={}),
-    )
-    monkeypatch.setattr(
-        module,
-        "DeciderEvaluator",
-        lambda provider, policy: SimpleNamespace(provider=provider, policy=policy),
-    )
     s = settings(tmp_path)
-    s.decider_policy_path.write_text('{"calibration_ready":false}')
-    snapshot = values(decider_mode="enforce", timeout_seconds=90.0, max_retries=1) | {
+    snapshot = values(timeout_seconds=90.0, max_retries=1) | {
         "revision": 3,
         "source": "operator",
         "updated_at": "timestamp",
     }
     provider, evaluator = build_providers(s, snapshot)
-    assert [x[0] for x in captured] == ["generation", "decider"]
+    assert [x[0] for x in captured] == ["generation"]
     assert all(
         x[1]["api_key"] == s.api_key
         and x[1]["timeout"] == 90
         and x[1]["max_retries"] == 1
         for x in captured
     )
-    assert evaluator.policy == {"calibration_ready": False}
-
-
-def entry(model_id, output="text", pricing=None, input_modalities=None):
-    return {
-        "id": model_id,
-        "name": "Catalog " + model_id,
-        "pricing": (
-            pricing if pricing is not None else {"prompt": "0", "completion": "0"}
-        ),
-        "architecture": {
-            "input_modalities": (
-                input_modalities if input_modalities is not None else ["text"]
-            ),
-            "output_modalities": [output],
-        },
-    }
-
-
-def install_catalog(monkeypatch, handler):
-    original = httpx.Client
-
-    def client(*args, **kwargs):
-        assert kwargs["timeout"].read == 10 and kwargs["timeout"].connect == 5
-        return original(*args, **kwargs, transport=httpx.MockTransport(handler))
-
-    monkeypatch.setattr(module.httpx, "Client", client)
-
-
-def test_live_catalog_is_modality_filtered_free_only_deterministic_and_metadata_only(
-    monkeypatch,
-):
-    calls = []
-
-    def handler(request):
-        calls.append(request)
-        assert request.method == "GET" and request.url.path == "/api/v1/models"
-        modality = request.url.params["output_modalities"]
-        good = (
-            entry("provider/text:free")
-            if modality == "text"
-            else entry("perplexity/decision:free", "decisions")
-        )
-        entries = [
-            good,
-            good,
-            entry("provider/paid", "text"),
-            entry(
-                "provider/fee:free",
-                modality,
-                {"prompt": "0", "completion": "0", "request": "1"},
-            ),
-            entry("provider/missing:free", modality, {"prompt": "0"}),
-            entry("provider/imageonly:free", modality, input_modalities=["image"]),
-            entry("provider/wrong-output:free", "embeddings"),
-            {"id": "provider/no-price:free"},
-        ]
-        return httpx.Response(200, json={"data": entries})
-
-    install_catalog(monkeypatch, handler)
-    result = discover_models("synthetic-private-key")
-    assert result["generation"] == [
-        {"id": "provider/text:free", "name": "Catalog provider/text:free"}
-    ]
-    assert result["decider"] == [
-        {"id": "perplexity/decision:free", "name": "Catalog perplexity/decision:free"}
-    ]
-    assert result[
-        "source"
-    ] == "live_catalog" and "synthetic-private-key" not in json.dumps(result)
-    assert len(calls) == 2
-
-
-def test_public_catalog_discovery_does_not_require_or_invent_key(monkeypatch):
-    def handler(request):
-        assert "authorization" not in request.headers
-        return httpx.Response(200, json={"data": []})
-
-    install_catalog(monkeypatch, handler)
-    assert discover_models("")["generation"] == []
-
-
-def test_catalog_failure_is_explicit_and_sanitized(monkeypatch):
-    install_catalog(
-        monkeypatch, lambda _: httpx.Response(503, text="SENSITIVE PROVIDER BODY")
-    )
-    with pytest.raises(OperatorSettingsUnavailable) as error:
-        discover_models("private-key")
-    assert "SENSITIVE" not in str(error.value) and "private-key" not in str(error.value)
+    assert evaluator is None

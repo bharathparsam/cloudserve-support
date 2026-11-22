@@ -20,6 +20,17 @@ VALUES = {
 }
 
 
+def test_local_api_keeps_docs_and_retires_console_only_endpoints(fixture_runtime):
+    with TestClient(create_app(fixture_runtime, start_worker=False)) as client:
+        assert client.get("/").json()["api_docs"] == "/docs"
+        assert client.get("/docs").status_code == 200
+        for route in ("/api/v1/models", "/api/v1/datasets", "/api/v1/datasets/template"):
+            assert client.get(route, headers=HEADERS).status_code == 404
+        assert client.put(
+            "/api/v1/settings", json={**VALUES, "decider_mode": "enforce"}, headers=HEADERS
+        ).status_code == 422
+
+
 def fixture_adapters(monkeypatch, fail=False, entered=None, resume=None):
     def build(settings, values):
         value = values.model_dump() if hasattr(values, "model_dump") else values
@@ -50,21 +61,15 @@ def fixture_adapters(monkeypatch, fail=False, entered=None, resume=None):
     monkeypatch.setattr("src.api.build_providers", build)
 
 
-def test_authenticated_settings_no_secret_and_template(fixture_runtime):
+def test_authenticated_settings_no_secret(fixture_runtime):
     with TestClient(create_app(fixture_runtime, start_worker=False)) as c:
         for url in [
             "/api/v1/settings",
-            "/api/v1/models",
-            "/api/v1/datasets",
-            "/api/v1/datasets/template",
         ]:
             assert c.get(url).status_code == 401
         s = c.get("/api/v1/settings", headers=HEADERS).json()
         assert s["source"] == "environment" and s["revision"] == 0
         assert "api_key" not in s and "operator_token" not in s
-        template = c.get("/api/v1/datasets/template", headers=HEADERS)
-        assert template.status_code == 200 and len(template.json()) == 4
-        assert "attachment" in template.headers["content-disposition"]
 
 
 def test_save_applies_and_restart_resolves_durable_settings(
@@ -143,25 +148,6 @@ def test_settings_enabled_or_active_batch_rejected(fixture_runtime, monkeypatch)
         )
 
 
-def test_enforce_settings_do_not_authorize_uncalibrated_enable(
-    fixture_runtime, monkeypatch
-):
-    fixture_adapters(monkeypatch)
-    with TestClient(create_app(fixture_runtime, start_worker=False)) as c:
-        r = c.put(
-            "/api/v1/settings",
-            json={**VALUES, "decider_mode": "enforce"},
-            headers=HEADERS,
-        )
-        assert r.status_code == 200 and not r.json()["policy_ready"]
-        r = c.put(
-            "/api/v1/controls/automation",
-            json={"enabled": True, "reason": "fixture"},
-            headers=HEADERS,
-        )
-        assert r.status_code == 409 and not fixture_runtime[1].control()["enabled"]
-
-
 def test_settings_save_excludes_concurrent_enable_but_stop_remains_available(
     fixture_runtime, monkeypatch
 ):
@@ -199,46 +185,4 @@ def test_settings_save_excludes_concurrent_enable_but_stop_remains_available(
             t.join(5)
         assert (
             result[0].status_code == 200 and not fixture_runtime[1].control()["enabled"]
-        )
-
-
-def test_bundled_launch_requires_enabled_and_records_batch(
-    fixture_runtime, monkeypatch
-):
-    monkeypatch.setattr(
-        "src.api.load_development",
-        lambda settings, limit: [{"channel": "chat", "body": "example"}]
-        * (limit or 500),
-    )
-    store = fixture_runtime[1]
-    with TestClient(create_app(fixture_runtime, start_worker=False)) as c:
-        body = {"dataset_id": "development", "limit": 2}
-        assert (
-            c.post("/api/v1/datasets/launch", json=body, headers=HEADERS).status_code
-            == 409
-        )
-        store.set_control(True, "fixture")
-        for invalid in [True, 0, 501, "2"]:
-            assert (
-                c.post(
-                    "/api/v1/datasets/launch",
-                    json={**body, "limit": invalid},
-                    headers=HEADERS,
-                ).status_code
-                == 422
-            )
-        assert (
-            c.post(
-                "/api/v1/datasets/launch",
-                json={"dataset_id": "validation"},
-                headers=HEADERS,
-            ).status_code
-            == 422
-        )
-        r = c.post("/api/v1/datasets/launch", json=body, headers=HEADERS)
-        assert r.status_code == 202 and r.json()["expected_count"] == 2
-        assert store.get_run(r.json()["run_id"])["kind"] == "development_builtin"
-        assert (
-            c.post("/api/v1/datasets/launch", json=body, headers=HEADERS).status_code
-            == 409
         )

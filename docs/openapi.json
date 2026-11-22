@@ -153,90 +153,6 @@
         }
       }
     },
-    "/api/v1/models": {
-      "get": {
-        "summary": "Models",
-        "operationId": "models_api_v1_models_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/datasets": {
-      "get": {
-        "summary": "Datasets",
-        "operationId": "datasets_api_v1_datasets_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/datasets/template": {
-      "get": {
-        "summary": "Template",
-        "operationId": "template_api_v1_datasets_template_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/datasets/launch": {
-      "post": {
-        "summary": "Launch Dataset",
-        "operationId": "launch_dataset_api_v1_datasets_launch_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DatasetLaunch"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/tickets": {
       "post": {
         "summary": "Submit",
@@ -870,34 +786,6 @@
         ],
         "title": "ControlInput"
       },
-      "DatasetLaunch": {
-        "properties": {
-          "dataset_id": {
-            "type": "string",
-            "const": "development",
-            "title": "Dataset Id"
-          },
-          "limit": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 500.0,
-                "minimum": 1.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Limit"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "dataset_id"
-        ],
-        "title": "DatasetLaunch"
-      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -921,16 +809,14 @@
           "decider_model": {
             "type": "string",
             "maxLength": 200,
-            "title": "Decider Model"
+            "title": "Decider Model",
+            "default": "legacy/disabled:free"
           },
           "decider_mode": {
             "type": "string",
-            "enum": [
-              "disabled",
-              "shadow",
-              "enforce"
-            ],
-            "title": "Decider Mode"
+            "const": "disabled",
+            "title": "Decider Mode",
+            "default": "disabled"
           },
           "timeout_seconds": {
             "type": "number",
@@ -958,8 +844,6 @@
         "type": "object",
         "required": [
           "generation_model",
-          "decider_model",
-          "decider_mode",
           "timeout_seconds",
           "max_retries"
         ],

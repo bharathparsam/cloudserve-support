@@ -40,12 +40,6 @@ coverage.xml
 htmlcov/
 coverage/
 
-# JavaScript dependencies, builds and browser-test output
-node_modules/
-frontend/dist/
-*.tsbuildinfo
-playwright-report/
-blob-report/
 test-results/
 .npm/
 .pnpm-store/
@@ -54,7 +48,6 @@ test-results/
 # Keep frozen assets/models, assets/corpus, policies, prompts and lockfiles tracked.
 storage/
 data/input/
-frontend/evidence/
 docs/evidence/
 *.db
 *.db-wal

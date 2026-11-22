@@ -30,16 +30,17 @@ class Settings:
             "DECIDER_MODEL", "perplexity/pplx-decider-flash-v1.3:free"
         )
     )
-    decider_mode: str = field(
-        default_factory=lambda: os.getenv("DECIDER_MODE", "shadow")
-    )
+    # Legacy metadata only; the optional observer is no longer part of runtime.
+    decider_mode: str = "disabled"
     mode: str = field(default_factory=lambda: os.getenv("APP_MODE", "live"))
 
     def __post_init__(self):
         if os.getenv("FREE_ONLY", "true").lower() != "true":
             raise ValueError("FREE_ONLY must remain true")
-        if self.decider_mode not in ("shadow", "enforce", "disabled"):
-            raise ValueError("DECIDER_MODE must be shadow, enforce or disabled")
+        if self.decider_mode != "disabled":
+            raise ValueError(
+                "The optional observer has been removed; use disabled mode"
+            )
         if self.mode != "live":
             raise ValueError("Runtime only supports live mode; fixtures are test-only")
         self.storage.mkdir(parents=True, exist_ok=True)
@@ -77,9 +78,3 @@ class Settings:
     @property
     def policy_path(self):
         return Path(os.getenv("POLICY_PATH", str(self.root / "policies/routing.json")))
-
-    @property
-    def decider_policy_path(self):
-        return Path(
-            os.getenv("DECIDER_POLICY_PATH", str(self.root / "policies/decider.json"))
-        )

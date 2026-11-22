@@ -1,4 +1,4 @@
-"""Explicit paid UI configuration and shared workflow; no hosted inference."""
+"""Explicit paid API configuration and shared workflow; no hosted inference."""
 
 from decimal import Decimal
 from types import SimpleNamespace
@@ -145,30 +145,4 @@ def test_pipeline_admits_a_new_record_without_changing_release_gates(fixture_run
     assert admitted == [job["record_id"]]
     assert result.action == "auto_respond" and all(
         c.status == "pass" for c in result.checks
-    )
-
-
-def test_failed_generation_assessment_does_not_trigger_unnecessary_observer_calls(
-    fixture_runtime,
-):
-    from test_decider_integration import EvaluatorFixture
-
-    store, pipeline = enable_fixture(fixture_runtime)
-    observer = EvaluatorFixture()
-    pipeline.evaluator = observer
-    pipeline.decider_mode = "shadow"
-    pipeline.provider.complete = lambda *args, **kwargs: (_ for _ in ()).throw(
-        RuntimeError("synthetic exhausted paid budget")
-    )
-    run = store.create_run(
-        [{"channel": "chat", "body": "How should I retry a request?"}]
-    )
-    job = store.claim_job()
-    result = pipeline.process(job["original"], run, job["record_id"], 0)
-    assert result.action == "escalate" and not observer.calls
-    events = store.events(run_id=run)["items"]
-    assert any(
-        e["stage"] == "decider"
-        and e["data"].get("reason") == "generation_assessment_unavailable"
-        for e in events
     )

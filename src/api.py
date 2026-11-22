@@ -1,7 +1,6 @@
 from __future__ import annotations
 import asyncio, json, secrets, uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File
 from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.exceptions import RequestValidationError
@@ -9,8 +8,6 @@ from .contracts import TicketInput, ControlInput, ReviewInput
 from .runtime import create_runtime
 from .jobs import JobRunner
 from filelock import FileLock, Timeout
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Literal
 from .operator_settings import (
     OperatorSettings,
     OperatorSettingsConflict,
@@ -18,21 +15,8 @@ from .operator_settings import (
     read_operator_settings,
     persist_operator_settings,
     build_providers,
-    discover_models,
 )
 from .runtime import apply_operator_values
-from .datasets import (
-    list_datasets,
-    load_development,
-    ticket_template,
-    DatasetUnavailable,
-)
-
-
-class DatasetLaunch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    dataset_id: Literal["development"]
-    limit: int | None = Field(default=None, strict=True, ge=1, le=500)
 
 
 def create_app(runtime=None, start_worker=True):
@@ -125,25 +109,16 @@ def create_app(runtime=None, start_worker=True):
             },
         )
 
-    def decider_status(p):
-        e = getattr(p, "evaluator", None)
-        return {
-            "mode": getattr(p, "decider_mode", "disabled"),
-            "policy_ready": bool(e and e.policy_ready),
-            "provider": dict(getattr(e.provider, "metadata", {})) if e else None,
-            "fingerprint": e.fingerprint() if e else None,
-        }
-
     def budget_status(request):
-        try:
-            from .paid_budget import BudgetLedger
+        from .paid_budget import BudgetLedger, LIMIT
 
+        try:
             if not hasattr(request.app.state, "budget_ledger"):
                 request.app.state.budget_ledger = BudgetLedger(request.app.state.store)
             return request.app.state.budget_ledger.snapshot()
         except RuntimeError:
             return {
-                "limit_usd": "0.25",
+                "limit_usd": str(LIMIT),
                 "spent_usd": None,
                 "reserved_usd": None,
                 "remaining_usd": None,
@@ -182,7 +157,6 @@ def create_app(runtime=None, start_worker=True):
                 or not (p.classifier.ready and p.retriever.ready and p.provider.api_key)
                 else "configured"
             ),
-            "decider": decider_status(p),
             "classifier": p.classifier.metadata,
             "retrieval": p.retriever.metadata,
             "provider": p.provider.metadata,
@@ -216,7 +190,9 @@ def create_app(runtime=None, start_worker=True):
         return {
             **read_operator_settings(s, request.app.state.store),
             "credential_configured": bool(s.api_key),
-            "policy_ready": bool(p.evaluator and p.evaluator.policy_ready),
+            "policy_ready": bool(
+                p.policy.get("calibration_ready") and p.policy.get("retrieval_ready")
+            ),
             "paid_budget": budget_status(request),
         }
 
@@ -246,8 +222,6 @@ def create_app(runtime=None, start_worker=True):
                 try:
                     if not provider.preflight().get("verified"):
                         raise ValueError("Generation provider not verified")
-                    if evaluator and not evaluator.provider.preflight().get("verified"):
-                        raise ValueError("Decider not verified")
                 except Exception:
                     raise HTTPException(
                         503,
@@ -274,54 +248,6 @@ def create_app(runtime=None, start_worker=True):
                 503, "Settings could not be durably saved; releases blocked"
             ) from None
 
-    @app.get("/api/v1/models", dependencies=[Depends(auth)])
-    def models(request: Request):
-        try:
-            return discover_models(request.app.state.settings.api_key)
-        except OperatorSettingsUnavailable:
-            raise HTTPException(503, "Live free model catalog is unavailable") from None
-
-    @app.get("/api/v1/datasets", dependencies=[Depends(auth)])
-    def datasets(request: Request):
-        return list_datasets(request.app.state.settings)
-
-    @app.get("/api/v1/datasets/template", dependencies=[Depends(auth)])
-    def template():
-        return JSONResponse(
-            ticket_template(),
-            headers={
-                "Content-Disposition": 'attachment; filename="cloudserve-ticket-template.json"'
-            },
-        )
-
-    @app.post("/api/v1/datasets/launch", status_code=202, dependencies=[Depends(auth)])
-    def launch_dataset(value: DatasetLaunch, request: Request):
-        s = request.app.state.settings
-        store = request.app.state.store
-        try:
-            with FileLock(str(s.storage / "pipeline.lock")).acquire(timeout=0):
-                if not store.control()["enabled"]:
-                    raise HTTPException(
-                        409,
-                        "Enable automatic answers before launching bundled development tickets",
-                    )
-                records = load_development(s, value.limit)
-                rid = store.create_run(records, "development_builtin")
-                return {"run_id": rid, "expected_count": len(records)}
-        except Timeout:
-            raise HTTPException(
-                409, "A ticket or settings operation is in progress; retry when idle"
-            ) from None
-        except DatasetUnavailable:
-            raise HTTPException(
-                503,
-                "Trusted development input is unavailable; check the documented read-only input mount",
-            ) from None
-        except RuntimeError:
-            raise HTTPException(
-                409, "Another run is active; wait for it to finish"
-            ) from None
-
     @app.put("/api/v1/controls/automation", dependencies=[Depends(auth)])
     def control_set(value: ControlInput, request: Request):
         p = request.app.state.pipeline
@@ -333,19 +259,6 @@ def create_app(runtime=None, start_worker=True):
             with FileLock(
                 str(request.app.state.settings.storage / "pipeline.lock")
             ).acquire(timeout=0):
-                if getattr(p, "decider_mode", "disabled") == "enforce":
-                    if not p.evaluator or not p.evaluator.policy_ready:
-                        raise HTTPException(
-                            409,
-                            "Reviewed Decider calibration evidence required before enforced automation",
-                        )
-                    try:
-                        p.evaluator.provider.preflight()
-                    except Exception:
-                        raise HTTPException(
-                            409,
-                            "Free Decider provider preflight failed; automation stays stopped",
-                        )
                 if not (p.classifier.ready and p.retriever.ready and p.policy):
                     raise HTTPException(409, "Frozen assets and policy required")
                 try:
@@ -486,8 +399,13 @@ def create_app(runtime=None, start_worker=True):
             raise HTTPException(404, "Run not found")
         records = [store.original(x["record_id"]) for x in tickets]
         events = store.events(run_id=run_id, limit=100000)["items"]
+        from evaluation.harness import frozen_body_boundary
+
         return compute_metrics(
-            [x["outcome"] for x in tickets if x.get("outcome")], records, events=events
+            [x["outcome"] for x in tickets if x.get("outcome")],
+            records,
+            events=events,
+            body_boundary=frozen_body_boundary(request.app.state.settings),
         )
 
     @app.get("/api/v1/runs/{run_id}/artifacts/{name}", dependencies=[Depends(auth)])
@@ -526,23 +444,28 @@ def create_app(runtime=None, start_worker=True):
             media_type="text/plain; version=0.0.4",
         )
 
-    @app.get("/{path:path}", include_in_schema=False)
-    def frontend(path: str):
-        if path.startswith(("api/", "health/", "metrics")):
-            raise HTTPException(404, "Not found")
-        root = Path(__file__).resolve().parents[1] / "frontend/dist"
-        target = (root / path).resolve()
-        if not target.is_relative_to(root.resolve()):
-            raise HTTPException(404, "Not found")
-        if target.is_file():
-            return FileResponse(target)
-        if (root / "index.html").is_file():
-            return FileResponse(root / "index.html")
-        return JSONResponse(
-            status_code=503, content={"message": "Frontend build missing; see README"}
-        )
+    @app.get("/", include_in_schema=False)
+    def home():
+        return {
+            "service": "CloudServe Support",
+            "api_docs": "/docs",
+            "metrics": "/metrics",
+            "batch_command": "python -m evaluation.harness --input INPUT --output OUTPUT --kind development",
+        }
 
     return app
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    import argparse
+    import uvicorn
+
+    parser = argparse.ArgumentParser(description="Start the local FastAPI interface")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+    uvicorn.run(
+        "src.api:app", host="127.0.0.1", port=args.port, log_config="logging.json"
+    )

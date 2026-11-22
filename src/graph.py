@@ -32,9 +32,6 @@ class State(TypedDict, total=False):
     provenance: str
     queue_seconds: float
     raw_sources: Any
-    decider_input: Any
-    decider_retrieval: Any
-    decider_checks: Any
     provider_metadata: Any
 
 
@@ -57,14 +54,15 @@ class PipelineService:
             policy,
         )
         self.evaluator, self.decider_mode = evaluator, decider_mode
-        if decider_mode not in ("disabled", "shadow", "enforce"):
-            raise ValueError("Invalid Decider mode")
+        if evaluator is not None or decider_mode != "disabled":
+            raise ValueError(
+                "The optional Decider experiment has been removed; use disabled mode"
+            )
         graph = StateGraph(State)
         for name in (
             "classify",
             "retrieve",
             "assess",
-            "decider",
             "route",
             "draft",
             "validate",
@@ -74,8 +72,7 @@ class PipelineService:
         graph.add_edge(START, "classify")
         graph.add_edge("classify", "retrieve")
         graph.add_edge("retrieve", "assess")
-        graph.add_edge("assess", "decider")
-        graph.add_edge("decider", "route")
+        graph.add_edge("assess", "route")
         graph.add_conditional_edges(
             "route",
             lambda s: "draft" if s["route"].action == "auto_candidate" else "finalize",
@@ -95,7 +92,6 @@ class PipelineService:
             "routing": ["FR-04", "A5"],
             "generation": ["FR-06", "A6"],
             "validation": ["FR-07", "A7"],
-            "decider": ["FR-03", "FR-05", "FR-07"],
             "final": ["FR-09", "FR-13", "A8"],
         }
         data = {
@@ -126,7 +122,8 @@ class PipelineService:
                     - datetime.fromisoformat(run["created_at"])
                 ).total_seconds(),
             )
-            if run and run["kind"] in ("manual", "development_upload")
+            if run
+            and run["kind"] in ("manual", "development_upload", "development_builtin")
             else 0.0
         )
         state = State(
@@ -334,137 +331,6 @@ class PipelineService:
             "provider_metadata": provider_metadata,
         }
 
-    def _decider(self, s):
-        assessment_unavailable = (
-            s["assessment"].decision == "unknown"
-            and "provider_unavailable" in s["assessment"].reasons
-        )
-        if (
-            self.evaluator is None
-            or self.decider_mode == "disabled"
-            or not s["ticket"].valid
-            or not s["control"]["enabled"]
-            or assessment_unavailable
-        ):
-            reason = (
-                "disabled"
-                if self.evaluator is None or self.decider_mode == "disabled"
-                else (
-                    "invalid_input"
-                    if not s["ticket"].valid
-                    else (
-                        "automation_stopped"
-                        if not s["control"]["enabled"]
-                        else "generation_assessment_unavailable"
-                    )
-                )
-            )
-            self.event(
-                s,
-                "decider",
-                {"status": "skipped", "mode": self.decider_mode, "reason": reason},
-            )
-            return {
-                "decider_input": Assessment(decision="unknown", reasons=[reason]),
-                "decider_retrieval": {"status": "unknown", "reasons": [reason]},
-            }
-        e = self.evaluator
-        t = s["ticket"]
-        key = digest(
-            {
-                "type": "decider-input-v1",
-                "text": t.subject + "\n" + t.body,
-                "evaluator": e.fingerprint(),
-                "corpus": getattr(self.retriever, "metadata", {}),
-            }
-        )
-        cached = self.store.cache_get(key)
-        if cached:
-            try:
-                assessment = Assessment.model_validate(cached["assessment"])
-                input_metadata = cached["metadata"]
-                input_origin = "Cached"
-            except Exception:
-                cached = None
-        if not cached:
-            try:
-                assessment = e.assess(t)
-            except Exception:
-                assessment = Assessment(
-                    decision="unknown", reasons=["decider_unavailable"]
-                )
-            input_metadata = json.loads(
-                json.dumps(getattr(e, "metadata", {}), default=str)
-            )
-            input_origin = input_metadata.get("provenance", "Unavailable")
-            if assessment.decision != "unknown":
-                self.store.cache_put(
-                    key,
-                    {"assessment": assessment.model_dump(), "metadata": input_metadata},
-                )
-        retrieval_key = digest(
-            {
-                "type": "decider-retrieval-v2",
-                "text": t.subject + "\n" + t.body,
-                "evaluator": e.fingerprint(),
-                "sources": [p.model_dump() for p in s.get("raw_sources", s["sources"])],
-            }
-        )
-        retrieval_cached = self.store.cache_get(retrieval_key)
-        retrieval = (
-            retrieval_cached.get("retrieval")
-            if isinstance(retrieval_cached, dict)
-            else None
-        )
-        if (
-            not isinstance(retrieval, dict)
-            or retrieval.get("status") not in ("pass", "fail", "unknown")
-            or not isinstance(retrieval.get("raw_answers"), dict)
-        ):
-            retrieval = None
-        retrieval_origin = "Cached" if retrieval is not None else "Unavailable"
-        retrieval_provider = (
-            retrieval_cached.get("provider", {}) if retrieval is not None else {}
-        )
-        if retrieval is None:
-            try:
-                retrieval = e.retrieval(t, s.get("raw_sources", s["sources"]))
-            except Exception:
-                retrieval = {
-                    "status": "unknown",
-                    "reasons": ["decider_unavailable"],
-                    "passages": [],
-                    "answerability_probability": None,
-                    "raw_answers": {},
-                }
-            retrieval_origin = getattr(e, "metadata", {}).get(
-                "provenance", "Unavailable"
-            )
-            retrieval_provider = json.loads(
-                json.dumps(getattr(e.provider, "metadata", {}), default=str)
-            )
-            if retrieval.get("raw_answers"):
-                self.store.cache_put(
-                    retrieval_key,
-                    {"retrieval": retrieval, "provider": retrieval_provider},
-                )
-        self.event(
-            s,
-            "decider",
-            {
-                "status": "observed" if self.decider_mode == "shadow" else "required",
-                "mode": self.decider_mode,
-                "input": assessment.model_dump(),
-                "input_provenance": input_origin,
-                "input_metadata": input_metadata,
-                "retrieval": retrieval,
-                "retrieval_provenance": retrieval_origin,
-                "provider": retrieval_provider,
-                "fingerprint": e.fingerprint(),
-            },
-        )
-        return {"decider_input": assessment, "decider_retrieval": retrieval}
-
     def _route(self, s):
         r = route.route(
             s["ticket"],
@@ -483,18 +349,6 @@ class PipelineService:
             s.get("raw_sources", s["sources"]),
             self.provider,
         )
-        if self.decider_mode == "enforce" and (
-            s.get("decider_input") is None
-            or s["decider_input"].decision != "clear"
-            or s.get("decider_retrieval", {}).get("status") != "pass"
-        ):
-            r = r.model_copy(
-                update={
-                    "action": "escalate",
-                    "reason_codes": r.reason_codes + ["decider_checks_not_passed"],
-                    "reason": r.reason + "; Required Decider assessment did not pass",
-                }
-            )
         self.event(s, "routing", r.model_dump())
         return {
             "route": r,
@@ -544,36 +398,12 @@ class PipelineService:
             }
 
     def _validate(self, s):
-        if s.get("draft") is None:
-            checks = [
-                GuardrailResult(
-                    name="schema", status="unknown", reasons=["generation_unavailable"]
-                )
-            ]
-        else:
-            try:
-                checks = guardrails.validate(
-                    self.provider,
-                    s["ticket"],
-                    s["draft"],
-                    s["sources"],
-                    s["classification"],
-                    s["route"],
-                )
-            except Exception:
-                checks = [
-                    GuardrailResult(
-                        name="validation",
-                        status="unknown",
-                        reasons=["validator_unavailable"],
-                    )
-                ]
+        identifiers = []
         if s.get("draft") is not None:
             # Local protected input is inspected here only; identities never enter provider state.
             import re
 
             original = self.store.original(s["ticket"].record_id)
-            identifiers = []
             if isinstance(original, dict):
                 identifiers = [
                     str(original.get(k, ""))
@@ -591,86 +421,31 @@ class PipelineService:
                         raw,
                     )
                 )
-            outbound = guardrails.render(s["draft"])
-            leaked = any(
-                re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", outbound, re.I)
-                for value in identifiers
-            )
-            if leaked:
-                checks = [
-                    (
-                        c.model_copy(
-                            update={
-                                "status": "fail",
-                                "reasons": ["known_input_identifier_in_output"],
-                            }
-                        )
-                        if c.name == "privacy"
-                        else c
-                    )
-                    for c in checks
-                ]
-        decider_checks = []
-        if (
-            self.evaluator is not None
-            and self.decider_mode != "disabled"
-            and s.get("draft") is not None
-        ):
-            # Never send a locally blocked private draft to a second hosted provider.
-            if any(c.name == "privacy" and c.status != "pass" for c in checks):
-                decider_checks = [
-                    GuardrailResult(
-                        name="decider_grounding",
-                        status="unknown",
-                        reasons=["local_privacy_block"],
-                    )
-                ]
-            else:
-                try:
-                    decider_checks = self.evaluator.validate(
-                        s["ticket"],
-                        s["draft"],
-                        s["sources"],
-                        s["classification"],
-                        s["route"],
-                    )
-                except Exception:
-                    decider_checks = [
-                        GuardrailResult(
-                            name="decider_grounding",
-                            status="unknown",
-                            reasons=["decider_validator_unavailable"],
-                        )
-                    ]
-            self.event(
-                s,
-                "decider",
-                {
-                    "status": (
-                        "observed" if self.decider_mode == "shadow" else "required"
-                    ),
-                    "phase": "answer_validation",
-                    "mode": self.decider_mode,
-                    "checks": [c.model_dump() for c in decider_checks],
-                    "provider": dict(getattr(self.evaluator.provider, "metadata", {})),
-                },
-            )
-        if self.decider_mode == "enforce":
-            checks += decider_checks + [
+        if s.get("draft") is None:
+            checks = [
                 GuardrailResult(
-                    name="decider_input_policy",
-                    status=(
-                        "pass"
-                        if s.get("decider_input")
-                        and s["decider_input"].decision == "clear"
-                        else "unknown"
-                    ),
-                ),
-                GuardrailResult(
-                    name="decider_retrieval_sufficiency",
-                    status=s.get("decider_retrieval", {}).get("status", "unknown"),
-                ),
+                    name="schema", status="unknown", reasons=["generation_unavailable"]
+                )
             ]
+        else:
+            try:
+                checks = guardrails.validate(
+                    self.provider,
+                    s["ticket"],
+                    s["draft"],
+                    s["sources"],
+                    s["classification"],
+                    s["route"],
+                    private_identifiers=identifiers,
+                )
+            except Exception:
+                checks = [
+                    GuardrailResult(
+                        name="validation",
+                        status="unknown",
+                        reasons=["validator_unavailable"],
+                    )
+                ]
         self.event(
             s,
             "validation",

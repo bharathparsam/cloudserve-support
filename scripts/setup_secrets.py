@@ -1,7 +1,7 @@
 """Create local configuration without displaying secrets or overwriting existing .env."""
 
 from pathlib import Path
-import secrets, os
+import secrets
 
 p = Path(__file__).resolve().parents[1] / ".env"
 if p.exists():
@@ -13,9 +13,6 @@ text = (
     .replace(
         "GRAFANA_ADMIN_PASSWORD=", "GRAFANA_ADMIN_PASSWORD=" + secrets.token_urlsafe(24)
     )
-)
-text = text.replace("LOCAL_UID=10001", "LOCAL_UID=" + str(os.getuid())).replace(
-    "LOCAL_GID=10001", "LOCAL_GID=" + str(os.getgid())
 )
 (p.parent / "storage").mkdir(exist_ok=True, mode=0o700)
 fd = p.open("x")

@@ -51,7 +51,7 @@ def export_run(settings, store, pipeline, run_id, output_path=None):
         "record_count": run["expected_count"],
         "export_mode": "persisted outcomes; no model reprocessing",
         "interventions": None,
-        "interventions_unavailable_reason": "UI operator activity is recorded separately; uninterrupted CLI intervention count is not inferred",
+        "interventions_unavailable_reason": "API operator activity is recorded separately; uninterrupted CLI intervention count is not inferred",
         "elapsed_seconds": None,
         "duration_definition": "UTC run started_at to completed_at, including scheduling/model/retry time; unavailable if either timestamp absent",
         "processing_code_hash": None,

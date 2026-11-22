@@ -102,14 +102,37 @@ CREATE TABLE IF NOT EXISTS artifact_manifests(run_id TEXT REFERENCES runs(run_id
                 )
         return rid
 
-    def claim_job(self, run_id=None):
+    def claim_job(self, run_id=None, allowed_kinds=None):
+        """Claim only runnable jobs owned by the requested execution surface.
+
+        The API worker supplies its finite API-kind allowlist. CLI evaluators keep
+        explicit run_id ownership; a dead CLI must never become an API job.
+        """
+        if allowed_kinds is not None:
+            if isinstance(allowed_kinds, str):
+                raise ValueError("Run kinds must be a collection")
+            allowed_kinds = tuple(sorted(set(allowed_kinds)))
+            if not all(isinstance(kind, str) and kind for kind in allowed_kinds):
+                raise ValueError("Invalid run kind")
+            if not allowed_kinds:
+                return None
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            clauses = ["j.state='queued'", "r.state IN ('queued','running')"]
+            params = []
+            if run_id:
+                clauses.append("j.run_id=?")
+                params.append(run_id)
+            if allowed_kinds is not None:
+                clauses.append(
+                    "r.kind IN (" + ",".join("?" for _ in allowed_kinds) + ")"
+                )
+                params.extend(allowed_kinds)
             row = db.execute(
-                "SELECT j.*,i.input_index,i.original FROM jobs j JOIN input_records i USING(record_id) WHERE j.state='queued' "
-                + ("AND j.run_id=? " if run_id else "")
-                + "ORDER BY j.created_at,i.input_index LIMIT 1",
-                (run_id,) if run_id else (),
+                "SELECT j.*,i.input_index,i.original,r.kind AS run_kind FROM jobs j JOIN input_records i USING(record_id) JOIN runs r ON r.run_id=j.run_id WHERE "
+                + " AND ".join(clauses)
+                + " ORDER BY j.created_at,i.input_index LIMIT 1",
+                params,
             ).fetchone()
             if not row:
                 return None

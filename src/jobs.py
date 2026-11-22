@@ -2,6 +2,8 @@ import threading
 from .ingest import now
 from filelock import FileLock, Timeout
 
+API_RUN_KINDS = frozenset(("manual", "development_upload", "development_builtin"))
+
 
 class JobRunner:
     def __init__(self, store, pipeline):
@@ -38,7 +40,7 @@ class JobRunner:
                     if not self.recovered:
                         self.store.recover_interrupted(before=self.started_at)
                         self.recovered = True
-                    job = self.store.claim_job()
+                    job = self.store.claim_job(allowed_kinds=API_RUN_KINDS)
                     if job:
                         self.pipeline.process(
                             job["original"],
