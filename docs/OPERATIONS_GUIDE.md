@@ -1,68 +1,64 @@
-# Operations guide
+# Local operations
 
-Run commands from the application root. See [README](../README.md) for installation and startup, [architecture](architecture.md) for the workflow, and [OpenAPI](openapi.json) for the API reference.
+Use the README for Python installation, batch processing, FastAPI and monitoring. Ordinary work needs no browser console, Node.js, application container or model picker. Keep the API, CLI and metrics server on the same `STORAGE_PATH` and `DATABASE_URL`. Fresh defaults use `storage/decisions.db`; changing storage selects a different database, not a migration.
 
-## Configuration and access
+## Configuration and control
 
-`python3 scripts/setup_secrets.py` creates a restricted `.env` from `.env.example`, generates the local operator/Grafana credentials and refuses to overwrite existing configuration. Keys never travel through the browser. After editing `.env`, recreate the app with `docker compose up -d --force-recreate app`.
+`python -m scripts.configure --model provider/model:free --timeout 30 --retries 2` saves audited free-model settings while automation is stopped and no run is active. Saving does not call a model or prove provider availability. Saved settings override environment defaults; rerun configure after changing model settings in `.env`. Legacy observer experiments were removed; explicitly reconfigure an old shadow/enforce selection rather than silently accepting it.
 
-Operator mutations and original ticket access require the bearer token. The console holds it only in page memory. Ports bind to localhost. This application does not implement multi-tenant production identity or send customer messages.
+`python -m scripts.control --enable --reason "Local processing"` checks assets and provider metadata before enabling answers. Metadata/catalog verification is not proof of inference availability or quota. Provider failures during processing produce handoffs. `python -m scripts.control --stop --reason "Incident"` changes the durable control epoch immediately without waiting for the processing lock. Old in-flight drafts cannot release after stop/re-enable. The API exposes the same controls. API shutdown also stops releases.
 
-Saved model settings override environment defaults and persist in SQLite. Saving requires stopped automation, an idle batch and verified pricing/capability for the selected mode. Decider can be disabled or run in shadow mode; enforced release requires reviewed calibration. Catalog verification establishes prices and capabilities, not inference availability or sufficient quota.
+The CLI owns its batch jobs and uses a separate native Chroma index built from the same frozen corpus/embeddings. Run one processing command at a time. If interrupted, preserve its output and manifest; do not relabel a retry as the original unattended run. Never edit live database files or delete storage to clear an error.
 
-## Tickets and batches
+## Input and reporting
 
-The four accepted channels are `email`, `chat`, `docs_comment` and `forum`. JSON imports are arrays with a nonblank `body`; `subject` and `ticket_id` are optional. Download the exact template in Runs & evaluation. Malformed individual records become explicit handoffs; duplicate external IDs retain separate input positions.
+The ordinary command is `python -m evaluation.harness --input INPUT.json --output OUTPUT_DIRECTORY`. Its default kind is `batch`, not a claim that the input is development or final validation. It handles arbitrary paths and counts. Labels/history remain evaluation sidecars, not classifier or provider inputs. Missing labels make label-dependent metrics unavailable. An output directory must be new or empty; previous evidence is never overwritten.
 
-The bundled selector uses only the fixed, fingerprinted development file in `data/input/development_tickets.json`. Start with the first five records. Do not upload supplied validation as development data. Closing the browser does not cancel a run. Stop blocks new answer releases; remaining batch records receive handoffs.
+The supplied local validation file is distinct from the unavailable hidden assessor file. Preserve the completed 500-ticket development evidence for its recorded revision. Do not repeat that batch routinely or claim it proves the simplified revision. Supplied-validation contents remain excluded from development tuning. The original pack contains conflicting validation-use instructions; follow the authoritative Project Brief's final-only use and report actual runs honestly. Dataset counts in prose conflict; the harness must process the actual file length.
 
-For a separately labelled development run, mount the chosen file in `data/input/`, then use a fresh output directory:
+## Final evaluation protocol
 
-```bash
-docker compose exec -T app python -m evaluation.harness --input /data/input/development-demo.json --output /app/storage/evaluation/dev-01 --kind development
-```
-
-## Evaluation
-
-Training, calibration and retrieval design use development data only. Supplied validation must remain unopened until the final gate. Before that run, finish development, freeze source/assets/protocol and verify enough free requests for the complete input. Monetary account balance is not request quota. Existing snapshots must be preserved; use new paths for revisions.
+Final evaluation remains a deliberate separate step, after changes and any agreed evidence are complete. Freeze exact code/assets/prompts/settings/protocol first. Use the original development input only to define the frozen short/long boundary:
 
 ```bash
-docker compose exec -T app python -m scripts.freeze --development-input /data/input/development_tickets.json
-docker compose exec -T app python -m scripts.preflight --records 80
-docker compose exec -T app python -m evaluation.harness --input /data/input/validation_tickets.json --output /app/storage/evaluation/final-01 --kind supplied_validation
+python -m scripts.freeze --development-input PATH_TO_DEVELOPMENT.json --output storage/freeze-new.json
 ```
 
-These commands enforce the current freeze, model, quota and operator controls. The final gate blocks when prerequisites fail. Development-only paid authorization cannot pass the free-only supplied-validation gate. Human reviewer identities, scores, closure and approvals must come from real people; blank metrics remain unavailable.
-
-## Explicit paid development test
-
-Free-only is the default. For authorized UI testing, select **Paid development test** in Settings, choose GPT-4.1 Mini or GPT-4o Mini, acknowledge the cost and save with zero retries. Its persistent SQLite ledger shares one USD0.25 cap across tickets, model changes and restarts, including earlier paid-test charges. There is no reset or top-up control. Exhausted or uncertain budgets block further paid requests; all answer gates still apply.
-
-A separate explicitly authorized command-line test also permits one selected ticket through the same workflow with GPT-4.1 Mini or GPT-4o Mini. Its adapter verifies price ceilings, reserves a conservative cost bound, allows three requests with no retries, and caps the entire test at USD0.25. Tools, web search and paid fallback are disabled. Each additional test budget requires explicit authorization.
+Preserve any old `storage/freeze.json` before activating the new manifest at that canonical path. Never overwrite an old freeze or preflight without preserving it. Then create a new preflight, using a record upper bound that covers the expected input without inspecting validation for development:
 
 ```bash
-docker compose exec -T app python -m scripts.paid_answer_smoke --authorize-paid-test --model openai/gpt-4.1-mini --budget-usd 0.25 --output /app/storage/live-answer/new-paid-test
+python -m scripts.preflight --records 120 --scope supplied_validation --output storage/preflight-new.json
 ```
 
-Use a new output path and one adapter for the authorized budget. This creates a real local `paid_development_test` run, logs actual costs, leaves saved normal model settings unchanged and restores a previously stopped automation state. Do not count this as free inference or independent quality evaluation.
-
-## Troubleshooting and backups
-
-- Check `docker compose ps`, `/health/ready` and `docker compose logs app` for readiness and safe operational errors.
-- HTTP429 means the model provider is rate limited. A preflight or changed key does not guarantee inference availability. No paid fallback is attempted.
-- Low intent confidence, missing source support or unknown/failed checks produce a handoff. Inspect routing and stage evidence; a completed batch is not necessarily an answered batch.
-- Stop automation before maintenance. Stop the app before copying `storage/`, or use a consistent SQLite backup that includes WAL state. Preserve frozen assets and monitoring volumes separately.
-- `docker compose stop` retains data. Do not delete volumes or reset audit records to improve results. Interrupted jobs are recorded explicitly.
-- Grafana's environment password initializes a fresh database; changing `.env` does not rotate an existing Grafana account.
-
-## Verification and limits
+Review the result. A verified free model listing does not prove enough free-request quota. Do not bypass a failed quota, asset or budget gate. Preserve the old preflight before activating a successful new candidate as `storage/preflight.json`. Preflight expires after one hour. With automation explicitly enabled, the frozen final command is:
 
 ```bash
-docker compose run --rm --no-deps app python -m pytest tests/ -q
+python -m evaluation.harness --input PATH_TO_VALIDATION.json --output storage/evaluation/final-01 --kind supplied_validation
 ```
 
-For frontend build/browser checks, follow the README. CI uses synthetic providers without live keys or validation; those passes do not establish live model quality. Linux arm64 has been exercised locally; the amd64 dependency lock is present but its image still needs verification.
+Reconcile every position to an answer or escalation; disclose target misses and external limitations. Do not tune on supplied validation or present a repeat as untouched performance. The hidden assessor dataset is not supplied; never claim to have run it.
 
-Known development limitations include urgency accuracy of41%, restrictive retrieval coverage, repeated templates across training/calibration, and weak generalization to novel short questions. Decider probabilities are not CloudServe-calibrated. Paid development examples have passed all11 release checks through normal UI submissions. Two verified UI requests took12.504s and9.060s; the project-wide paid-test ledger reportedUSD0.0078024 including earlier tests. These observations do not establish the3s latency or general quality targets. Independent reviews and final supplied validation remain outstanding.
+## Historical paid evidence
 
-Generated evidence and internal notes are preserved locally but ignored by Git. Reports, video and original workbooks remain separate human-owned submission work.
+The original brief requires free-tier or local inference. Earlier user-authorized paid development/evaluation is a disclosed deviation. The retained paid adapters and audit/ledger utilities protect historical charges and unknown-charge reservations; no normal setup command enables paid mode. The USD 3.50 authorized cap is durable, shared and cannot be reset by changing models or configuration. Unknown timeout charges remain fully reserved. Never delete the ledger, release an unknown charge, increase the cap or initiate paid calls automatically.
+
+An already authorized paid runtime still requires explicit `--authorize-paid-evaluation`, scoped authorization, matching freeze and fresh smoke/budget/credit preflight. Cost estimates are not guarantees. The latest pre-simplification preflight failed its cap check; its code/configuration fingerprints are now obsolete. Preserve it as historical evidence. No new paid or final validation run is authorized by this cleanup.
+
+## Reviews and evidence
+
+`evaluation.export` is a library used by API jobs; `export_run(settings, store, pipeline, run_id, output_path)` exports existing persisted decisions without model calls. Review sheets are left blank for actual independent human reviewers. `python -m evaluation.review --help` describes review import. AI reviews are not human reviews; no software fills personal reflections, hours or approvals.
+
+## Monitoring and incident response
+
+Keep `python -m scripts.monitor --host 0.0.0.0` running so Prometheus can scrape `host.docker.internal:8001`. Compose starts only Prometheus and Grafana; their ports bind to localhost. The metrics server serves numeric metrics only, not original tickets or keys. For an incident: stop automation, preserve the affected run/logs, assess private-data or unsupported-answer exposure, notify the accountable owner, remediate and test the cause, then explicitly re-enable. Record the actual incident and accountable person; do not invent approvals.
+
+To back up consistently, stop automation and all writers first, then copy the database and its WAL/SHM files together, plus prompts, policies and run artifacts. Preserve any legacy Docker `audit_data` volume; this cleanup does not migrate or delete it. Do not point native and container processes at the same writable Chroma directory.
+
+## Troubleshooting
+
+- Missing imports: activate `.venv` and install the documented platform lock.
+- First startup is slow: MiniLM downloads once; later starts use the cache.
+- Provider or model unavailable: verify local credentials/model selection; keep handoffs and report the outage.
+- Configuration refused: stop automation and wait for active runs; an invalid saved configuration must be explicitly corrected.
+- No Grafana data: keep the metrics process alive, check Prometheus targets, and allow at least one 15-second scrape. Historical cumulative metrics do not prove sustained service availability.
+- Missing report or nonzero exit: preserve the manifest and log; audit/export failure means incomplete evidence rather than success.

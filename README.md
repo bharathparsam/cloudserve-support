@@ -1,99 +1,102 @@
 # CloudServe Support
 
-Support teams receive repetitive requests across email, chat, documentation comments and forums. CloudServe classifies tickets, retrieves documentation and produces a checked, cited answer or a human handoff.
+A local Python pipeline that reads support tickets, retrieves CloudServe documentation, and saves cited answers or human handoffs with decision logs and a metrics report. FastAPI provides the programmatic interface. Prometheus and Grafana provide monitoring; there is no custom web application.
 
-## 1. Requirements
+## Set up
 
-- Docker with Docker Compose v2.
-- Python 3 on macOS/Linux for local credential setup.
-- An OpenRouter API key and internet access for initial downloads and inference.
-
-Run these commands from `cloudserve-support/`.
-
-## 2. Create your local configuration
+Use Python 3.12 and run commands from this directory. Initial embedding downloads and model inference need internet access. Docker Compose is needed only for Prometheus and Grafana.
 
 ```bash
-python3 scripts/setup_secrets.py
-mkdir -p data/input
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m scripts.setup_secrets
 ```
 
-The setup script creates `.env` from `.env.example`, generates a secure `OPERATOR_TOKEN` and `GRAFANA_ADMIN_PASSWORD`, and sets your local UID/GID. It does not display secrets or overwrite an existing `.env`.
+The pinned `requirements.txt` is for macOS. On Linux, replace its installation command with these commands, choosing `requirements-linux-arm64.txt` for ARM machines:
 
-Open `.env` locally and set `OPENROUTER_API_KEY`. Keep the generated operator token and Grafana password there. **Never commit `.env` or put real credentials in `.env.example`.**
+```bash
+python -m pip install --no-deps --index-url https://download.pytorch.org/whl/cpu torch==2.15.0+cpu
+python -m pip install -r requirements-linux-amd64.txt
+```
 
-| Setting | Purpose |
+Edit your local `.env` and set `OPENROUTER_API_KEY`. Set `OPENROUTER_MODEL` to an available explicit `provider/model:free` identifier. The template contains an initial candidate, not a guarantee of current availability or free quota. Keep credentials out of Git. The setup command generates the API operator token and Grafana password without printing them and never overwrites an existing `.env`.
+
+Save the model configuration locally:
+
+```bash
+python -m scripts.configure
+```
+
+Trained classifier assets, the documentation corpus, and index artifacts are included under `assets/`; ordinary setup does not retrain them. The embedding model downloads on first use and is then cached.
+
+## Run a file and save the report
+
+The input is a JSON array. Each ticket has `channel` (`email`, `chat`, `docs_comment`, or `forum`), `body`, and optional `subject` and `ticket_id`. See `data/samples/four_channels.json`.
+
+Explicitly enable automatic answers, then run the input file:
+
+```bash
+python -m scripts.control --enable --reason "Local batch processing"
+python -m evaluation.harness --input data/samples/four_channels.json --output storage/evaluation/run-01
+```
+
+Use any input path, filename and record count. Choose a new or empty output directory for each run. The command processes the whole array unattended and exits nonzero if it cannot complete durably. It produces:
+
+| File | Contents |
 |---|---|
-| `OPERATOR_TOKEN` | Connect the operator in the application |
-| `GRAFANA_ADMIN_PASSWORD` | Sign in to Grafana as `admin` |
-| `OPENROUTER_API_KEY` | Authenticate inference requests |
-| `OPENROUTER_MODEL` | Initial free generation model |
-| `DECIDER_MODEL`, `DECIDER_MODE` | Optional observer; `shadow` or `disabled` for ordinary testing |
-| `MODEL_TIMEOUT_SECONDS`, `MODEL_MAX_RETRIES` | Request limits; defaults: 30 seconds and 2 retries |
+| `metrics.md`, `metrics.json` | Computed volume, business, technical and governance measures, with unavailable measures identified |
+| `outcomes.jsonl` | One answer or escalation per input position |
+| `decisions.jsonl` | Processing decisions, sources, checks and version traceability |
+| `manifest.json` | Run identity, input/source fingerprints, state and reconciliation |
+| Other JSON/CSV files | Classification, retrieval and group analysis; blank sheets for independent human reviews |
 
-Model settings can be saved in the UI; saved settings survive restarts and override environment defaults. Free-only is the default. **Paid development test** mode in Settings supports the two approved OpenAI models with a shared USD0.25 cap across tickets and restarts, including prior usage. It never switches to a paid fallback. See the [operations guide](docs/OPERATIONS_GUIDE.md).
+Without enabled automation, records receive safe handoffs. Missing documentation, unsafe input, unavailable models and failed checks also produce handoffs. An automatic answer is not proof of business closure or customer satisfaction. A completed batch with only handoffs demonstrates continuity, not answer quality.
 
-## 3. Add development tickets (optional)
-
-If you have the supplied dataset pack next to this directory:
+Stop automatic answers immediately, including releases from tickets already in flight:
 
 ```bash
-cp ../05_Datasets/development_tickets.json data/input/
+python -m scripts.control --stop --reason "Operator stop"
 ```
 
-This enables the UI's bundled 500-ticket selector. You can also upload your own JSON using the downloadable template. Keep supplied validation separate from development runs.
+Stop does not cancel a provider request already sent. The batch continues with handoffs. Run `python -m scripts.control` to inspect control state. All commands share the same local database; use consistent path settings across terminals.
 
-## 4. Start the application
+## Monitor the run
+
+Keep this metrics process running in another activated terminal:
 
 ```bash
-docker compose up --build -d
-docker compose ps
+python -m scripts.monitor --host 0.0.0.0
 ```
 
-First startup may take several minutes to download and load the embedding model.
-
-| Service | Address | Login |
-|---|---|---|
-| Support console | http://localhost:8000 | Connect using `OPERATOR_TOKEN` from `.env` |
-| Prometheus | http://localhost:9090 | Local access |
-| Grafana | http://localhost:3000 | `admin` and `GRAFANA_ADMIN_PASSWORD` from `.env` |
-
-## 5. Process tickets
-
-1. Connect the operator and review **Settings** while automatic answers are stopped. Choose **Free-only** or the explicitly acknowledged **Paid development test** mode, then save.
-2. Explicitly enable automatic answers.
-3. Use **New ticket**, or **Runs & evaluation** to select the first five development tickets or upload JSON.
-4. Inspect the answer or handoff, sources and blocking checks in **Ticket queue**.
-
-Provider failures, low confidence and insufficient documentation produce handoffs. **Stop automatic answers** blocks releases; remaining batch records still receive handoffs.
-
-## 6. Check and stop
-
-Run backend tests:
+It serves numeric metrics at port 8001 from the persistent decision store, including after a batch exits. It does not run models or submit tickets. Start monitoring services:
 
 ```bash
-docker compose run --rm --no-deps app python -m pytest tests/ -q
+docker compose up -d
 ```
 
-Optional frontend checks require Node.js 22 and Playwright Chromium:
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 — user `admin`, password from your local `.env`.
+
+The provisioned CloudServe dashboard shows ticket throughput by channel/outcome, automatic answers versus escalations, median/p95 latency, guardrail activations and confidence distribution. Prometheus scrapes the host metrics server every 15 seconds; allow one scrape before checking results. Stop services with `docker compose stop`; data is retained.
+
+## Use the FastAPI interface
 
 ```bash
-cd frontend
-npm ci
-npx playwright install chromium
-npm run build
-npm run test:browser
+python -m src.api
 ```
 
-From the application root, stop services without deleting stored tickets:
+API documentation: http://localhost:8000/docs. Submit tickets, inspect outcomes/sources/logs and operate the stop control through this interface. Mutations and original-input access require `Authorization: Bearer <OPERATOR_TOKEN>`. The batch command works without the API server. API and CLI use the same processing pipeline and database; API workers cannot take over CLI batches.
+
+## Test
 
 ```bash
-docker compose stop
+python -m pytest tests/ -q
 ```
 
-After changing `.env`, reload the application environment:
+Tests isolate storage and credentials and use synthetic model responses. They do not consume model quota or establish live model quality. GitHub Actions runs the Python suite on push and pull requests.
 
-```bash
-docker compose up -d --force-recreate app
-```
+See [operations](docs/OPERATIONS_GUIDE.md) for final evaluation, historical paid-run safeguards, review import and backups, and [architecture](docs/architecture.md) for the component and governance design. Original project requirements call for free models; historical paid development was an explicitly authorized deviation, not evidence of compliance or assessor approval. Model unavailability must remain visible and degrade safely.
 
-For troubleshooting, backups, evaluation and evidence, see the [detailed operations guide](docs/OPERATIONS_GUIDE.md). Reports, video, workbooks and independent human reviews are separate submission tasks.
+Code and prompt development used Codex assistance. Libraries, the supplied CloudServe documentation corpus, and model artifacts are identified in their manifests and prompt register. Report, workbooks, human reviews and video are separate submission deliverables.
