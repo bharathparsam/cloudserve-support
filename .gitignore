@@ -75,6 +75,8 @@ Desktop.ini
 
 # Local implementation notes and generated docs; publish only stable references.
 .local-notes/
+CURRENT_STATUS.md
+NEXT_STEPS.md
 docs/*
 !docs/architecture.md
 !docs/OPERATIONS_GUIDE.md
