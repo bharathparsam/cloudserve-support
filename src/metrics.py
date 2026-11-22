@@ -165,6 +165,56 @@ def calculate(outcomes, expected):
     }
 
 
+def provider_observations(events):
+    """Last actual inference observation per role; no active provider health claim."""
+    from datetime import datetime
+
+    latest = {}
+    calls = {}
+    for event in events:
+        data = event.get("data", {})
+        if data.get("provenance") in ("Cached", "Fixture replay"):
+            continue
+        meta = data.get("provider") or data.get("model")
+        if (
+            not isinstance(meta, dict)
+            or meta.get("fixture")
+            or not meta.get("last_call_id")
+        ):
+            continue
+        status = meta.get("last_call_status")
+        http = meta.get("last_http_status")
+        posted = (
+            type(http) is int
+            or (status == "success" and bool(meta.get("actual_model")))
+            or (
+                meta.get("last_error") == "network_timeout"
+                and type(meta.get("request_attempts")) is int
+                and meta["request_attempts"] > 0
+            )
+        )
+        if not posted or status not in ("success", "failed"):
+            continue
+        try:
+            stamp = datetime.fromisoformat(
+                (meta.get("last_call_at") or event["timestamp"]).replace("Z", "+00:00")
+            ).timestamp()
+        except (KeyError, ValueError, TypeError):
+            continue
+        role = "decider" if event.get("stage") == "decider" else "generation"
+        key = (role, meta["last_call_id"])
+        # Repeated audit snapshots of one call must not refresh its age.
+        if key not in calls or stamp < calls[key]["timestamp_seconds"]:
+            calls[key] = {"timestamp_seconds": stamp, "success": status == "success"}
+    for (role, _), observation in calls.items():
+        if (
+            role not in latest
+            or observation["timestamp_seconds"] > latest[role]["timestamp_seconds"]
+        ):
+            latest[role] = observation
+    return latest
+
+
 def prometheus_text(store):
     tickets = store.list_tickets(limit=100000)["items"]
     outcomes = [t["outcome"] for t in tickets if t.get("outcome")]
@@ -244,7 +294,26 @@ def prometheus_text(store):
             f'cloudserve_confidence_band{{lower="{lo/10:.1f}",upper="{(lo+1)/10:.1f}"}} {count}'
         )
     calls = {}
-    for event in store.events(limit=100000)["items"]:
+    events = store.events(limit=100000)["items"]
+    observations = provider_observations(events)
+    lines += [
+        "# HELP cloudserve_provider_last_call_success Last actually observed inference call status, NaN without evidence; not current availability or SLA",
+        "# TYPE cloudserve_provider_last_call_success gauge",
+        "# TYPE cloudserve_provider_last_call_observed gauge",
+        "# TYPE cloudserve_provider_last_call_timestamp_seconds gauge",
+    ]
+    for role in ("generation", "decider"):
+        observed = observations.get(role)
+        lines.append(
+            f'cloudserve_provider_last_call_observed{{role="{role}"}} {int(observed is not None)}'
+        )
+        lines.append(
+            f'cloudserve_provider_last_call_success{{role="{role}"}} {int(observed["success"]) if observed else "NaN"}'
+        )
+        lines.append(
+            f'cloudserve_provider_last_call_timestamp_seconds{{role="{role}"}} {observed["timestamp_seconds"] if observed else "NaN"}'
+        )
+    for event in events:
         metadata = event.get("data", {}).get("provider") or event.get("data", {}).get(
             "model"
         )

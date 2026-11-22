@@ -1,1 +1,284 @@
-{"uid": "cloudserve", "title": "CloudServe Support \u2014 measured operations", "schemaVersion": 41, "version": 1, "refresh": "15s", "panels": [{"id": 1, "title": "Persisted outcomes", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}, "targets": [{"expr": "sum(cloudserve_outcomes) by (action)", "refId": "A"}]}, {"id": 2, "title": "Blocked drafts", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}, "targets": [{"expr": "cloudserve_blocked", "refId": "A"}]}, {"id": 3, "title": "Automation enabled", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}, "targets": [{"expr": "cloudserve_automation_enabled", "refId": "A"}]}, {"id": 4, "title": "Processing p95", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}, "targets": [{"expr": "histogram_quantile(0.95, sum(rate(cloudserve_processing_seconds_bucket[5m])) by (le))", "refId": "A"}]}, {"id": 5, "title": "Service scrape", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8}, "targets": [{"expr": "up{job=\"cloudserve\"}", "refId": "A"}]}]}
+{
+  "uid": "cloudserve",
+  "title": "CloudServe Support",
+  "schemaVersion": 41,
+  "version": 3,
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Persisted outcomes",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(cloudserve_outcomes) by (action)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Blocked drafts",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_blocked",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Automation enabled",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_automation_enabled",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Processing latency median and p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(cloudserve_processing_seconds_bucket[5m])) by (le))",
+          "legendFormat": "median",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(cloudserve_processing_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Service scrape",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"cloudserve\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Provider inference: last observed call (not SLA)",
+      "description": "1=last actually observed inference call succeeded; 0=failed; no data means no inference evidence. Historical and potentially stale; inspect observation age. Cached/fixture and pre-POST refusals are excluded.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_provider_last_call_success",
+          "legendFormat": "{{role}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Age of last provider inference observation",
+      "description": "Seconds since actual observed inference; this separates stale historical success from fresh evidence. Not an active provider probe.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "targets": [
+        {
+          "expr": "time() - cloudserve_provider_last_call_timestamp_seconds",
+          "legendFormat": "{{role}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Tickets processed per hour by channel and outcome",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(cloudserve_outcomes[5m])) by (channel, action) * 3600",
+          "legendFormat": "{{channel}} {{action}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Automatic answers and escalations percent",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(cloudserve_outcomes) by (action) / scalar(sum(cloudserve_outcomes))",
+          "legendFormat": "{{action}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Guardrail activations per hour",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(cloudserve_guardrail_blocks[5m])) by (type) * 3600",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Confidence distribution",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_confidence_band",
+          "legendFormat": "{{lower}} to {{upper}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
