@@ -1,102 +1,85 @@
 # CloudServe Support
 
-A local Python pipeline that reads support tickets, retrieves CloudServe documentation, and saves cited answers or human handoffs with decision logs and a metrics report. FastAPI provides the programmatic interface. Prometheus and Grafana provide monitoring; there is no custom web application.
+A local Python pipeline that processes ticket JSON files and saves answers, handoffs, decision logs and metrics. Docker is not required.
 
-## Set up
+## 1. Clone
 
-Use Python 3.12 and run commands from this directory. Initial embedding downloads and model inference need internet access. Docker Compose is needed only for Prometheus and Grafana.
+```bash
+git clone https://github.com/bharathparsam/cloudserve-support.git
+cd cloudserve-support
+```
+
+## 2. Install and create `.env`
+
+Python 3.12 on macOS:
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m scripts.setup_secrets
 ```
 
-The pinned `requirements.txt` is for macOS. On Linux, replace its installation command with these commands, choosing `requirements-linux-arm64.txt` for ARM machines:
+On Linux, install the CPU PyTorch wheel and the appropriate `requirements-linux-*.txt` lock instead; see [operations](docs/OPERATIONS_GUIDE.md). Keep an existing `.env` rather than regenerating it.
 
-```bash
-python -m pip install --no-deps --index-url https://download.pytorch.org/whl/cpu torch==2.15.0+cpu
-python -m pip install -r requirements-linux-amd64.txt
-```
+## 3. Configure
 
-Edit your local `.env` and set `OPENROUTER_API_KEY`. Set `OPENROUTER_MODEL` to an available explicit `provider/model:free` identifier. The template contains an initial candidate, not a guarantee of current availability or free quota. Keep credentials out of Git. The setup command generates the API operator token and Grafana password without printing them and never overwrites an existing `.env`.
-
-Save the model configuration locally:
+Edit `.env`: set `OPENROUTER_API_KEY` and an available free `OPENROUTER_MODEL` (`provider/model:free`). Keep `FREE_ONLY=true`. Never commit credentials.
 
 ```bash
 python -m scripts.configure
 ```
 
-Trained classifier assets, the documentation corpus, and index artifacts are included under `assets/`; ordinary setup does not retrain them. The embedding model downloads on first use and is then cached.
-
-## Run a file and save the report
-
-The input is a JSON array. Each ticket has `channel` (`email`, `chat`, `docs_comment`, or `forum`), `body`, and optional `subject` and `ticket_id`. See `data/samples/four_channels.json`.
-
-Explicitly enable automatic answers, then run the input file:
+## 4. Run your chosen file
 
 ```bash
-python -m scripts.control --enable --reason "Local batch processing"
-python -m evaluation.harness --input data/samples/four_channels.json --output storage/evaluation/run-01
+python -m scripts.control --enable --reason "Local batch"
+python -m evaluation.harness --input "/path/to/tickets.json" --output storage/results/run-01
 ```
 
-Use any input path, filename and record count. Choose a new or empty output directory for each run. The command processes the whole array unattended and exits nonzero if it cannot complete durably. It produces:
+**You choose the file with `--input`; it is not hardcoded.** Input is a JSON array with `channel` and `body` for each ticket. Supported channels: `email`, `chat`, `docs_comment`, `forum`. A sample is included at `data/samples/four_channels.json`. Use a new output folder for each run.
 
-| File | Contents |
-|---|---|
-| `metrics.md`, `metrics.json` | Computed volume, business, technical and governance measures, with unavailable measures identified |
-| `outcomes.jsonl` | One answer or escalation per input position |
-| `decisions.jsonl` | Processing decisions, sources, checks and version traceability |
-| `manifest.json` | Run identity, input/source fingerprints, state and reconciliation |
-| Other JSON/CSV files | Classification, retrieval and group analysis; blank sheets for independent human reviews |
+Free models can be rate-limited; unavailable or unsafe responses become handoffs. For formal evaluation, follow the [evaluation protocol](docs/OPERATIONS_GUIDE.md#final-evaluation-protocol).
 
-Without enabled automation, records receive safe handoffs. Missing documentation, unsafe input, unavailable models and failed checks also produce handoffs. An automatic answer is not proof of business closure or customer satisfaction. A completed batch with only handoffs demonstrates continuity, not answer quality.
+## 5. Open the reports
 
-Stop automatic answers immediately, including releases from tickets already in flight:
+The output folder contains `metrics.md`, `metrics.json`, `outcomes.jsonl`, `decisions.jsonl`, `manifest.json` and detailed JSON/CSV analysis. Unsafe or unsupported tickets receive handoffs.
+
+- API: `python -m src.api` → http://localhost:8000/docs
+- Metrics: `python -m scripts.monitor` → http://localhost:8001/metrics
+- Stop releases: `python -m scripts.control --stop`
+- Tests: `python -m pytest tests/ -q`
+
+## 6. Prometheus and Grafana without Docker
+
+On macOS with [Homebrew](https://brew.sh), install and prepare the local configuration once:
 
 ```bash
-python -m scripts.control --stop --reason "Operator stop"
+brew install prometheus grafana
+mkdir -p storage/grafana-provisioning
+cp -R monitoring/grafana/provisioning/. storage/grafana-provisioning/
+sed 's/host.docker.internal/127.0.0.1/' monitoring/prometheus.yml > storage/prometheus-local.yml
+sed 's|http://prometheus:9090|http://127.0.0.1:9090|' monitoring/grafana/provisioning/datasources/default.yml > storage/grafana-provisioning/datasources/default.yml
+sed "s|/var/lib/grafana/dashboards|$PWD/monitoring/grafana/dashboards|" monitoring/grafana/provisioning/dashboards/default.yml > storage/grafana-provisioning/dashboards/default.yml
 ```
 
-Stop does not cancel a provider request already sent. The batch continues with handoffs. Run `python -m scripts.control` to inspect control state. All commands share the same local database; use consistent path settings across terminals.
-
-## Monitor the run
-
-Keep this metrics process running in another activated terminal:
+From the repository folder, run each command in a separate terminal. Activate `.venv` in the Python terminal:
 
 ```bash
-python -m scripts.monitor --host 0.0.0.0
+# Terminal 1: ticket metrics
+python -m scripts.monitor
+
+# Terminal 2: Prometheus
+prometheus --config.file=storage/prometheus-local.yml --storage.tsdb.path=storage/prometheus --web.listen-address=127.0.0.1:9090
+
+# Terminal 3: Grafana
+GF_PATHS_PROVISIONING="$PWD/storage/grafana-provisioning" grafana server \
+  --homepath "$(brew --prefix grafana)/share/grafana" \
+  cfg:default.paths.data="$PWD/storage/grafana" \
+  cfg:default.paths.logs="$PWD/storage/grafana/log" \
+  cfg:server.http_addr=127.0.0.1
 ```
 
-It serves numeric metrics at port 8001 from the persistent decision store, including after a batch exits. It does not run models or submit tickets. Start monitoring services:
+Open [Prometheus](http://localhost:9090) or [Grafana](http://localhost:3000). On first Grafana login, use `admin` / `admin` and change the password. Open the **CloudServe Support** dashboard; its data source is configured automatically. Start monitoring before a batch to see live rates. Press `Ctrl+C` in each terminal to stop monitoring.
 
-```bash
-docker compose up -d
-```
-
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000 — user `admin`, password from your local `.env`.
-
-The provisioned CloudServe dashboard shows ticket throughput by channel/outcome, automatic answers versus escalations, median/p95 latency, guardrail activations and confidence distribution. Prometheus scrapes the host metrics server every 15 seconds; allow one scrape before checking results. Stop services with `docker compose stop`; data is retained.
-
-## Use the FastAPI interface
-
-```bash
-python -m src.api
-```
-
-API documentation: http://localhost:8000/docs. Submit tickets, inspect outcomes/sources/logs and operate the stop control through this interface. Mutations and original-input access require `Authorization: Bearer <OPERATOR_TOKEN>`. The batch command works without the API server. API and CLI use the same processing pipeline and database; API workers cannot take over CLI batches.
-
-## Test
-
-```bash
-python -m pytest tests/ -q
-```
-
-Tests isolate storage and credentials and use synthetic model responses. They do not consume model quota or establish live model quality. GitHub Actions runs the Python suite on push and pull requests.
-
-See [operations](docs/OPERATIONS_GUIDE.md) for final evaluation, historical paid-run safeguards, review import and backups, and [architecture](docs/architecture.md) for the component and governance design. Original project requirements call for free models; historical paid development was an explicitly authorized deviation, not evidence of compliance or assessor approval. Model unavailability must remain visible and degrade safely.
-
-Code and prompt development used Codex assistance. Libraries, the supplied CloudServe documentation corpus, and model artifacts are identified in their manifests and prompt register. Report, workbooks, human reviews and video are separate submission deliverables.
+Code and prompts used Codex assistance; see [architecture](docs/architecture.md) and the [prompt register](prompts/README.md).
