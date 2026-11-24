@@ -73,9 +73,17 @@ class Retriever:
         self.passages = {}
         self.corpus_path = Path(corpus_path)
         self.chroma_path = Path(chroma_path)
+        self.top_k = kwargs.get("top_k", 4)
+        configured_model = kwargs.get("embedding_model", MODEL)
+        if "/" not in configured_model:
+            configured_model = "sentence-transformers/" + configured_model
         try:
             manifest_path = self.corpus_path.parent / "index-manifest.json"
             self.metadata = json.loads(manifest_path.read_text())
+            if configured_model != self.metadata["embedding_model"]:
+                raise ValueError(
+                    "EMBEDDING_MODEL differs from frozen index; rebuild the embedding artifacts first"
+                )
             actual = hashlib.sha256(self.corpus_path.read_bytes()).hexdigest()
             if actual != self.metadata["corpus_hash"]:
                 raise ValueError("Corpus hash mismatch")
@@ -102,7 +110,7 @@ class Retriever:
             )
             local_only = kwargs.get("local_files_only", snapshot.is_dir())
             self.model = SentenceTransformer(
-                MODEL,
+                configured_model,
                 cache_folder=str(cache),
                 revision=self.metadata["embedding_revision"],
                 device="cpu",
@@ -154,7 +162,8 @@ class Retriever:
                 "error_type": type(e).__name__,
             }
 
-    def search(self, text, k=4):
+    def search(self, text, k=None):
+        k = self.top_k if k is None else k
         # Empty/unavailable queries must not expose the previous ticket's hits or
         # similarity metadata through the diagnostics/audit interface.
         self.last_candidates = []

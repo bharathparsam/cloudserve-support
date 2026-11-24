@@ -1,85 +1,97 @@
 # CloudServe Support
 
-A local Python pipeline that processes ticket JSON files and saves answers, handoffs, decision logs and metrics. Docker is not required.
+Process support tickets from a JSON file into cited answers or contextual human handoffs. Results and decision logs are saved locally. Delivery is simulated; the application does not send messages to customers.
 
-## 1. Clone
+## 1. Before you start
+
+You need **Python 3.12**, Git, an internet connection and an **OpenRouter API key** with access to a free model. The first run downloads the MiniLM embedding model. Trained classifiers, documentation and sample tickets are included; your own dataset is optional.
+
+The quick start below uses macOS and a bash/zsh terminal. Linux users should use the [Linux installation commands](docs/OPERATIONS_GUIDE.md#linux-installation), then continue at step 3. Docker, Node.js and monitoring services are optional for batch processing.
+
+## 2. Install
 
 ```bash
 git clone https://github.com/bharathparsam/cloudserve-support.git
 cd cloudserve-support
-```
-
-## 2. Install and create `.env`
-
-Python 3.12 on macOS:
-
-```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+```
+
+Keep this terminal open and run the remaining commands from the repository directory. In a new terminal, return to this directory and run `source .venv/bin/activate` again.
+
+## 3. Create your configuration
+
+```bash
 python -m scripts.setup_secrets
 ```
 
-On Linux, install the CPU PyTorch wheel and the appropriate `requirements-linux-*.txt` lock instead; see [operations](docs/OPERATIONS_GUIDE.md). Keep an existing `.env` rather than regenerating it.
+Open the generated `.env` in your editor:
 
-## 3. Configure
+- Set `OPENROUTER_API_KEY` to your own key from [OpenRouter](https://openrouter.ai/settings/keys).
+- Set `MODEL_NAME` to an available free model using its exact `provider/model:free` identifier. The template provides a free Gemma candidate.
+- Keep `FREE_ONLY=true` and the remaining defaults for your first run.
 
-Edit `.env`: set `OPENROUTER_API_KEY` and an available free `OPENROUTER_MODEL` (`provider/model:free`). Keep `FREE_ONLY=true`. Never commit credentials.
+The setup command generates local secrets and creates storage. If `.env` already exists, keep it and edit it directly. Never commit it.
+
+Save your model selection:
 
 ```bash
 python -m scripts.configure
 ```
 
-## 4. Run your chosen file
+On an existing installation, stop automation with `python -m scripts.control --stop` and wait for active jobs to finish before configuring. Saved model settings override `.env`; rerun configure after changing your model. See [all environment settings](docs/OPERATIONS_GUIDE.md#environment-settings) for details.
+
+## 4. Run the included sample
 
 ```bash
-python -m scripts.control --enable --reason "Local batch"
-python -m evaluation.harness --input "/path/to/tickets.json" --output storage/results/run-01
+python -m scripts.control --enable --reason "First sample run"
+python -m evaluation.harness --input data/samples/four_channels.json --output storage/results/sample-01
 ```
 
-**You choose the file with `--input`; it is not hardcoded.** Input is a JSON array with `channel` and `body` for each ticket. Supported channels: `email`, `chat`, `docs_comment`, `forum`. A sample is included at `data/samples/four_channels.json`. Use a new output folder for each run.
+Enabling checks local assets and provider metadata. The batch then processes four sample tickets, one for each supported channel. Free-model rate limits, unsupported requests or failed checks can produce handoffs; a completed run does not guarantee automatic answers.
 
-Free models can be rate-limited; unavailable or unsafe responses become handoffs. For formal evaluation, follow the [evaluation protocol](docs/OPERATIONS_GUIDE.md#final-evaluation-protocol).
+For another run, use a new output directory such as `storage/results/sample-02`. If enabling fails, follow [troubleshooting](docs/OPERATIONS_GUIDE.md#troubleshooting).
 
-## 5. Open the reports
+## 5. Read the results
 
-The output folder contains `metrics.md`, `metrics.json`, `outcomes.jsonl`, `decisions.jsonl`, `manifest.json` and detailed JSON/CSV analysis. Unsafe or unsupported tickets receive handoffs.
+Open `storage/results/sample-01/metrics.md` for the summary. The same directory contains:
 
-- API: `python -m src.api` → http://localhost:8000/docs
-- Metrics: `python -m scripts.monitor` → http://localhost:8001/metrics
-- Stop releases: `python -m scripts.control --stop`
-- Tests: `python -m pytest tests/ -q`
+| File | Contents |
+|---|---|
+| `outcomes.jsonl` | Each ticket's answer or handoff |
+| `decisions.jsonl` | Detailed processing decisions |
+| `metrics.json` | Machine-readable metrics |
+| `manifest.json` | Run status and configuration evidence |
 
-## 6. Prometheus and Grafana without Docker
-
-On macOS with [Homebrew](https://brew.sh), install and prepare the local configuration once:
+When finished, stop automatic answers:
 
 ```bash
-brew install prometheus grafana
-mkdir -p storage/grafana-provisioning
-cp -R monitoring/grafana/provisioning/. storage/grafana-provisioning/
-sed 's/host.docker.internal/127.0.0.1/' monitoring/prometheus.yml > storage/prometheus-local.yml
-sed 's|http://prometheus:9090|http://127.0.0.1:9090|' monitoring/grafana/provisioning/datasources/default.yml > storage/grafana-provisioning/datasources/default.yml
-sed "s|/var/lib/grafana/dashboards|$PWD/monitoring/grafana/dashboards|" monitoring/grafana/provisioning/dashboards/default.yml > storage/grafana-provisioning/dashboards/default.yml
+python -m scripts.control --stop
 ```
 
-From the repository folder, run each command in a separate terminal. Activate `.venv` in the Python terminal:
+## Use your own tickets
+
+Supply a JSON array with `channel` and `body` for each ticket; `subject` is optional. Supported channels are `email`, `chat`, `docs_comment` and `forum`.
+
+```json
+[
+  {"channel": "email", "subject": "Rate limit", "body": "How should I retry a 429 response?"}
+]
+```
+
+Enable automation again if you stopped it, then run:
 
 ```bash
-# Terminal 1: ticket metrics
-python -m scripts.monitor
-
-# Terminal 2: Prometheus
-prometheus --config.file=storage/prometheus-local.yml --storage.tsdb.path=storage/prometheus --web.listen-address=127.0.0.1:9090
-
-# Terminal 3: Grafana
-GF_PATHS_PROVISIONING="$PWD/storage/grafana-provisioning" grafana server \
-  --homepath "$(brew --prefix grafana)/share/grafana" \
-  cfg:default.paths.data="$PWD/storage/grafana" \
-  cfg:default.paths.logs="$PWD/storage/grafana/log" \
-  cfg:server.http_addr=127.0.0.1
+python -m evaluation.harness --input "/path/to/tickets.json" --output storage/results/custom-01
 ```
 
-Open [Prometheus](http://localhost:9090) or [Grafana](http://localhost:3000). On first Grafana login, use `admin` / `admin` and change the password. Open the **CloudServe Support** dashboard; its data source is configured automatically. Start monitoring before a batch to see live rates. Press `Ctrl+C` in each terminal to stop monitoring.
+## Optional tools
 
-Code and prompts used Codex assistance; see [architecture](docs/architecture.md) and the [prompt register](prompts/README.md).
+- API: `python -m src.api`, then open http://localhost:8000/docs. Protected endpoints require the `OPERATOR_TOKEN` from your local `.env` as a bearer token.
+- Metrics: `python -m scripts.monitor`, then open http://localhost:8001/metrics.
+- Prometheus/Grafana: follow the [monitoring setup](docs/OPERATIONS_GUIDE.md#monitoring-on-macos-without-docker).
+- Tests: `python -m pytest tests/ -q`.
+- Formal assessment runs: follow the [final evaluation protocol](docs/OPERATIONS_GUIDE.md#final-evaluation-protocol).
+
+See the [operations guide](docs/OPERATIONS_GUIDE.md) for advanced configuration and troubleshooting. Code and prompts used Codex assistance; see [architecture](docs/architecture.md) and the [prompt register](prompts/README.md).

@@ -46,13 +46,20 @@ def create_runtime(settings=None, *, isolated_index=False):
     values = read_operator_settings(settings, store)
     apply_operator_values(settings, values)
     classifier = Classifier(settings.classifier_dir)
-    retriever = Retriever(settings.corpus_path, settings.chroma_path)
+    retriever = Retriever(
+        settings.corpus_path,
+        settings.chroma_path,
+        embedding_model=settings.embedding_model,
+        top_k=settings.retrieval_top_k,
+    )
     provider, evaluator = build_providers(settings, values)
     policy = (
         json.loads(settings.policy_path.read_text())
         if settings.policy_path.exists()
         else {}
     )
+    if settings.confidence_threshold is not None:
+        policy["confidence_threshold"] = settings.confidence_threshold
     pipeline = PipelineService(
         store,
         classifier,

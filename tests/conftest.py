@@ -12,6 +12,12 @@ def isolated_runtime_environment(monkeypatch):
         "CORPUS_PATH",
         "CLASSIFIER_DIR",
         "POLICY_PATH",
+        "MODEL_NAME",
+        "OPENROUTER_MODEL",
+        "EMBEDDING_MODEL",
+        "CONFIDENCE_THRESHOLD",
+        "RETRIEVAL_TOP_K",
+        "LOG_LEVEL",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "")

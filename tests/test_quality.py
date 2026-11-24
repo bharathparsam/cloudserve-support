@@ -63,6 +63,7 @@ def test_contradictory_identical_text_ceiling_is_label_diagnostic():
 
 def test_empty_and_unavailable_retrieval_clear_previous_ticket_metadata():
     r = Retriever.__new__(Retriever)
+    r.top_k = 4
     r.ready = True
     r.last_candidates = ["previous private ticket source"]
     r.last_query_metadata = {"old": "previous private ticket"}

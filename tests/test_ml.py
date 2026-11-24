@@ -15,6 +15,17 @@ def test_missing_models_explicit_unavailable(tmp_path):
     assert not c.ready and c.predict("hello").status == "unavailable"
 
 
+def test_embedding_model_mismatch_does_not_open_existing_index(tmp_path):
+    r = Retriever(
+        ROOT / "assets/corpus/documentation.json",
+        tmp_path / "chroma",
+        embedding_model="different/model",
+    )
+    assert not r.ready
+    assert r.metadata["error_type"] == "ValueError"
+    assert not (tmp_path / "chroma").exists()
+
+
 def test_real_classifier_vocab_probabilities_and_determinism():
     c = Classifier(ROOT / "assets/models")
     assert c.ready
@@ -73,6 +84,9 @@ def test_retrieval_bootstraps_new_store_and_resolves(tmp_path, monkeypatch):
     for s in hits:
         resolved = r.resolve(s.chunk_id)
         assert resolved.content == s.content and resolved.corpus_hash == s.corpus_hash
+    r.top_k = 5
+    r.search("API HTTP 429 rate limits exponential backoff")
+    assert len(r.last_candidates) == 5
     assert r.resolve("invented") is None
     assert r.search("purple unicorn zeppelin marmalade") == []
     assert (

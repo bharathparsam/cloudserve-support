@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import os
+import logging
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
@@ -21,9 +22,24 @@ class Settings:
         default_factory=lambda: os.getenv("OPENROUTER_API_KEY", ""), repr=False
     )
     model: str = field(
-        default_factory=lambda: os.getenv(
-            "OPENROUTER_MODEL", "google/gemma-4-26b-a4b-it:free"
+        default_factory=lambda: os.getenv("MODEL_NAME")
+        or os.getenv("OPENROUTER_MODEL", "google/gemma-4-26b-a4b-it:free")
+    )
+    embedding_model: str = field(
+        default_factory=lambda: os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    )
+    retrieval_top_k: int = field(
+        default_factory=lambda: int(os.getenv("RETRIEVAL_TOP_K", "4"))
+    )
+    confidence_threshold: float | None = field(
+        default_factory=lambda: (
+            float(os.environ["CONFIDENCE_THRESHOLD"])
+            if os.getenv("CONFIDENCE_THRESHOLD")
+            else None
         )
+    )
+    log_level: str = field(
+        default_factory=lambda: os.getenv("LOG_LEVEL", "INFO").upper()
     )
     decider_model: str = field(
         default_factory=lambda: os.getenv(
@@ -35,6 +51,17 @@ class Settings:
     mode: str = field(default_factory=lambda: os.getenv("APP_MODE", "live"))
 
     def __post_init__(self):
+        if self.retrieval_top_k < 1:
+            raise ValueError("RETRIEVAL_TOP_K must be positive")
+        if (
+            self.confidence_threshold is not None
+            and not 0 <= self.confidence_threshold <= 1
+        ):
+            raise ValueError("CONFIDENCE_THRESHOLD must be between 0 and 1")
+        if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError("Invalid LOG_LEVEL")
+        logging.basicConfig(level=self.log_level)
+        logging.getLogger().setLevel(self.log_level)
         if os.getenv("FREE_ONLY", "true").lower() != "true":
             raise ValueError("FREE_ONLY must remain true")
         if self.decider_mode != "disabled":
