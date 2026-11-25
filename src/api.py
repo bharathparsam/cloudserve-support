@@ -262,7 +262,8 @@ def create_app(runtime=None, start_worker=True):
                 if not (p.classifier.ready and p.retriever.ready and p.policy):
                     raise HTTPException(409, "Frozen assets and policy required")
                 try:
-                    p.provider.preflight()
+                    if not p.provider.preflight().get("verified"):
+                        raise ValueError("Provider not verified")
                 except Exception:
                     raise HTTPException(
                         409,
@@ -305,6 +306,7 @@ def create_app(runtime=None, start_worker=True):
         urgency: str | None = None,
         blocked: bool | None = None,
         search: str | None = None,
+        run_id: str | None = None,
     ):
         return request.app.state.store.list_tickets(
             limit=max(1, min(limit, 100)),
@@ -314,6 +316,7 @@ def create_app(runtime=None, start_worker=True):
             urgency=urgency,
             blocked=blocked,
             search=search,
+            run_id=run_id,
         )
 
     @app.get("/api/v1/tickets/{record_id}")
@@ -444,14 +447,13 @@ def create_app(runtime=None, start_worker=True):
             media_type="text/plain; version=0.0.4",
         )
 
+    from .console import register_console, UI
+
+    register_console(app, auth, save_settings)
+
     @app.get("/", include_in_schema=False)
     def home():
-        return {
-            "service": "CloudServe Support",
-            "api_docs": "/docs",
-            "metrics": "/metrics",
-            "batch_command": "python -m evaluation.harness --input INPUT --output OUTPUT --kind development",
-        }
+        return FileResponse(UI / "index.html")
 
     return app
 

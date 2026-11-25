@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CloudServe · Ticket operations</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+    <script src="/ui/app.js" defer></script>
+</head>
+
+<body>
+    <a class="skip-link" href="#main">Skip to dashboard</a>
+    <aside class="sidebar"><a class="brand" href="/" aria-label="CloudServe home"><span class="brand-icon"
+                aria-hidden="true">c<span>↗</span></span><span>cloudserve<small>SUPPORT WORKSPACE</small></span></a>
+        <div class="nav-caption">WORKSPACE</div>
+        <nav aria-label="Main navigation"><button class="nav-item selected" id="dashboardNav"><span
+                    aria-hidden="true">▦</span> Dashboard</button><button class="nav-item" id="historyNav"><span
+                    aria-hidden="true">◷</span> Run history</button><button class="nav-item" id="settingsNav"><span
+                    aria-hidden="true">⚙</span> Settings</button></nav>
+        <div class="sidebar-bottom"><span class="local-dot"></span> Local workspace<p>Answers are simulated.<br>No
+                customer messages are sent.</p><a href="/docs" target="_blank" rel="noopener">API documentation ↗</a><br><a href="http://localhost:3000/d/cloudserve/cloudserve-support" target="_blank" rel="noopener">Grafana dashboard ↗</a><br><a href="http://localhost:9090/alerts" target="_blank" rel="noopener">Prometheus alerts ↗</a>
+        </div>
+    </aside>
+    <div class="workspace">
+        <header class="topbar">
+            <div class="breadcrumb">Workspace <span>/</span> <strong id="pageLabel">Dashboard</strong></div>
+            <div class="top-actions"><span id="automationBadge" class="pill neutral">Checking status</span><button
+                    id="stopButton" class="button danger subtle" disabled>Stop answers</button><button
+                    id="connectButton" class="button secondary">Connect</button></div>
+        </header>
+        <main id="main" tabindex="-1">
+            <div id="notification" role="alert" hidden></div>
+            <section class="page-heading">
+                <div>
+                    <div class="eyebrow">SUPPORT OPERATIONS</div>
+                    <h1>Every ticket. A clear next step.</h1>
+                    <p>Load a dataset, follow the decisions, and see what needs a human.</p>
+                </div><button id="newRunButton" class="button primary">＋ New run</button>
+            </section>
+            <section class="model-strip" aria-label="Current model">
+                <div><span class="model-icon" aria-hidden="true">✧</span><strong id="activeModel">Connect to see your
+                        model</strong><span id="modeBadge" class="pill neutral">Model settings</span></div><button
+                    id="changeModel" class="text-button">Change model →</button>
+            </section>
+            <section class="stats" aria-label="Selected run totals">
+                <article><span class="stat-label">Tickets processed</span><strong id="processedCount">—</strong><small
+                        id="processedNote">Choose a run to begin</small></article>
+                <article><span class="stat-label"><i class="dot green"></i> Answered</span><strong
+                        id="answeredCount">—</strong><small>Checked, cited responses</small></article>
+                <article><span class="stat-label"><i class="dot amber"></i> Human handoff</span><strong
+                        id="handoffCount">—</strong><small>Context preserved for review</small></article>
+                <article><span class="stat-label"><i class="dot red"></i> Blocked releases</span><strong
+                        id="blockedCount">—</strong><small>Included in handoffs</small></article>
+            </section>
+            <section id="uploadPanel" class="panel upload-panel" aria-labelledby="uploadTitle">
+                <div class="panel-heading">
+                    <div>
+                        <h2 id="uploadTitle">Start with your dataset</h2>
+                        <p>A JSON array of tickets. All four support channels, one workflow.</p>
+                    </div><span class="step-badge">01 / LOAD</span>
+                </div>
+                <div class="upload-content"><label class="file-zone" for="datasetFile"><span class="upload-icon"
+                            aria-hidden="true">↑</span><strong id="fileLabel">Choose a JSON dataset</strong><span
+                            id="fileDescription">Up to 10 MiB · email, chat, docs_comment, forum</span><input
+                            id="datasetFile" type="file" accept=".json,application/json"></label>
+                    <div class="upload-actions">
+                        <p id="datasetPreview">Choose your ticket dataset to begin. Preview the record count, then run it using your saved model.</p>
+                        <div class="button-row"><button id="runButton" class="button primary" disabled>Run dataset
+                                →</button></div><small>Invalid ticket records are accounted for in the run. The file
+                            itself must be a valid JSON array.</small>
+                    </div>
+                </div>
+            </section>
+            <section class="panel flow-panel" aria-labelledby="flowTitle">
+                <div class="panel-heading">
+                    <div>
+                        <h2 id="flowTitle">How tickets move through the system</h2>
+                        <p>Actual decision records for the selected run. Skipped stages are shown separately.</p>
+                    </div><span id="runState" class="pill neutral">No run selected</span>
+                </div>
+                <div id="flowStages" class="flow-stages"></div>
+                <div class="progress-caption"><span id="progressText">Load a dataset to follow processing.</span><span
+                        id="progressPercent">0%</span></div><progress id="runProgress" max="100" value="0"
+                    aria-label="Selected batch progress"></progress>
+            </section>
+            <section class="panel tickets-panel" aria-labelledby="ticketsTitle">
+                <div class="panel-heading ticket-heading">
+                    <div>
+                        <h2 id="ticketsTitle">Ticket decisions</h2>
+                        <p id="ticketSubtitle">Select a ticket to inspect its answer, sources and checks.</p>
+                    </div>
+                    <div class="table-controls"><label class="sr-only" for="runSelect">Select run</label><select
+                            id="runSelect">
+                            <option value="">No runs yet</option>
+                        </select><button id="refreshButton" class="button secondary compact"
+                            aria-label="Refresh runs">↻</button></div>
+                </div>
+                <div class="filter-row"><label class="search"><span aria-hidden="true">⌕</span><input id="ticketSearch"
+                            type="search" placeholder="Search tickets"
+                            aria-label="Search ticket subject or body"></label><label class="sr-only"
+                        for="outcomeFilter">Filter outcomes</label><select id="outcomeFilter">
+                        <option value="">All outcomes</option>
+                        <option value="auto_respond">Answered</option>
+                        <option value="escalate">Human handoff</option>
+                        <option value="blocked">Blocked release</option>
+                    </select><button id="reportButton" class="button secondary compact" disabled>↓ Report
+                        ZIP</button><button id="downloadButton" class="button secondary compact" disabled>↓ Download
+                        outcomes</button></div>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th scope="col">Ticket</th>
+                                <th scope="col">Channel</th>
+                                <th scope="col">Outcome</th>
+                                <th scope="col">Decision</th>
+                                <th scope="col">Confidence</th>
+                                <th scope="col"><span class="sr-only">Details</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="ticketRows"></tbody>
+                    </table>
+                </div>
+                <div id="emptyState" class="empty-state">
+                    <div class="empty-icon" aria-hidden="true">↗</div>
+                    <h3>Your next run starts here</h3>
+                    <p>Connect to your local workspace, then load a dataset.<br>Saved runs will also appear in the
+                        selector above.</p>
+                </div>
+                <div class="table-footer"><span id="ticketCount">0 tickets</span>
+                    <div class="button-row"><button id="previousPage" class="button secondary compact" disabled>←
+                            Previous</button><button id="nextPage" class="button secondary compact" disabled>Next
+                            →</button></div>
+                </div>
+            </section>
+            <section id="historyPanel" class="panel" hidden>
+                <div class="panel-heading">
+                    <div>
+                        <h2>Run history</h2>
+                        <p>Saved processing runs, with their original outcomes.</p>
+                    </div>
+                    <div class="button-row"><span id="historyCount" class="pill neutral">0 runs</span><button
+                            id="allReportsButton" class="button secondary compact">↓ Download all reports</button></div>
+                </div>
+                <div id="historyList"></div><button id="moreHistory" class="button secondary" hidden>Load more
+                    runs</button>
+            </section>
+            <footer>CloudServe Support <div class="monitoring-links"><a href="http://localhost:3000/d/cloudserve/cloudserve-support" target="_blank" rel="noopener">Grafana ↗</a> · <a href="http://localhost:9090" target="_blank" rel="noopener">Prometheus ↗</a></div><span>Local processing · Traceable decisions · Human oversight</span></footer>
+        </main>
+    </div>
+    <dialog id="connectDialog" class="small-dialog" aria-labelledby="connectTitle">
+        <form id="connectForm">
+            <div class="dialog-heading">
+                <div>
+                    <div class="eyebrow">LOCAL ACCESS</div>
+                    <h2 id="connectTitle">Connect your workspace</h2>
+                </div><button type="button" class="icon-button" data-close="connectDialog"
+                    aria-label="Close connection dialog">×</button>
+            </div>
+            <p>Enter the <code>OPERATOR_TOKEN</code> from your local <code>.env</code>. It stays in this page's memory
+                and is cleared when you disconnect or reload.</p><label for="operatorToken">Operator token</label><input
+                id="operatorToken" type="password" autocomplete="off" required
+                placeholder="Paste your local operator token">
+            <p id="connectError" class="form-error" role="alert"></p>
+            <div class="dialog-footer"><button type="button" class="button secondary"
+                    data-close="connectDialog">Cancel</button><button class="button primary"
+                    type="submit">Connect</button></div>
+        </form>
+    </dialog>
+    <dialog id="settingsDialog" class="settings-dialog" aria-labelledby="settingsTitle">
+        <form id="settingsForm">
+            <div class="dialog-heading">
+                <div>
+                    <div class="eyebrow">WORKSPACE SETTINGS</div>
+                    <h2 id="settingsTitle">Choose how answers are generated</h2>
+                </div><button type="button" class="icon-button" data-close="settingsDialog"
+                    aria-label="Close settings">×</button>
+            </div>
+            <p>Classification and retrieval stay local. The selected model handles sensitivity assessment, drafting and
+                semantic checks.</p>
+            <fieldset class="mode-picker">
+                <legend>Model mode</legend><label><input type="radio" name="generationMode" value="free_only"
+                        checked><span><strong>Free models</strong><small>Zero-priced endpoints · no paid
+                            fallback</small></span></label><label><input type="radio" name="generationMode"
+                        value="paid_test"><span><strong>Paid models</strong><small>Explicit run confirmation · shared
+                            budget cap</small></span></label>
+            </fieldset><label for="modelSelect">Generation model</label><select id="modelSelect" required></select>
+            <p id="modelNote" class="field-note"></p>
+            <div class="settings-grid">
+                <div><label for="timeoutInput">Timeout per request</label><select id="timeoutInput">
+                        <option value="30">30 seconds</option>
+                        <option value="60">60 seconds</option>
+                        <option value="120">120 seconds</option>
+                    </select></div>
+                <div><label for="retriesInput">Retries</label><select id="retriesInput">
+                        <option value="0">None</option>
+                        <option value="1">1 retry</option>
+                        <option value="2">2 retries</option>
+                    </select></div>
+            </div>
+            <div id="budgetBox" class="info-box" hidden></div>
+            <p id="settingsInfo" class="field-note"></p>
+            <p id="settingsError" class="form-error" role="alert"></p>
+            <div class="dialog-footer"><button type="button" class="button secondary"
+                    data-close="settingsDialog">Cancel</button><button id="saveSettingsButton" class="button primary"
+                    type="submit">Save model</button></div>
+        </form>
+    </dialog>
+    <dialog id="paidDialog" class="small-dialog" aria-labelledby="paidTitle">
+        <div class="dialog-heading">
+            <h2 id="paidTitle">Start a paid run?</h2><button class="icon-button" data-close="paidDialog"
+                aria-label="Close paid confirmation">×</button>
+        </div>
+        <p id="paidDescription"></p>
+        <p>Charges use the existing shared allowance. Unknown timeout charges retain their reservations. Switching
+            models does not reset the budget.</p>
+        <div class="dialog-footer"><button class="button secondary" data-close="paidDialog">Cancel</button><button
+                id="confirmPaidButton" class="button primary">Authorize paid run</button></div>
+    </dialog>
+    <dialog id="ticketDialog" class="ticket-dialog" aria-labelledby="detailTitle">
+        <div class="dialog-heading">
+            <div>
+                <div id="detailChannel" class="eyebrow"></div>
+                <h2 id="detailTitle">Ticket details</h2>
+            </div><button class="icon-button" data-close="ticketDialog" aria-label="Close ticket details">×</button>
+        </div>
+        <div id="ticketDetail"></div>
+    </dialog>
+    <p id="liveStatus" class="sr-only" role="status" aria-live="polite"></p>
+    <noscript>
+        <p>Enable JavaScript to use the local dashboard. The command-line harness remains available.</p>
+    </noscript>
+</body>
+
+</html>

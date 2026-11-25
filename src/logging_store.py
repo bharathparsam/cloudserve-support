@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS artifact_manifests(run_id TEXT REFERENCES runs(run_id
         finally:
             db.close()
 
-    def create_run(self, records, kind="development"):
+    def create_run(self, records, kind="development", *, admission=None):
         rid = str(uuid.uuid4())
         stamp = now()
         with self.connection() as db:
@@ -100,6 +100,11 @@ CREATE TABLE IF NOT EXISTS artifact_manifests(run_id TEXT REFERENCES runs(run_id
                     "INSERT INTO jobs VALUES(?,?,?,?,?)",
                     (rec, rec, rid, "queued", stamp),
                 )
+                if index == 0 and admission is not None:
+                    db.execute(
+                        "INSERT INTO decision_events VALUES(?,?,?,?,?,?)",
+                        (str(uuid.uuid4()), stamp, rec, rid, "run_admission", dump(admission)),
+                    )
         return rid
 
     def claim_job(self, run_id=None, allowed_kinds=None):
@@ -393,7 +398,7 @@ CREATE TABLE IF NOT EXISTS artifact_manifests(run_id TEXT REFERENCES runs(run_id
                 for r in db.execute(
                     "SELECT record_id FROM input_records "
                     + ("WHERE run_id=? " if filters.get("run_id") else "")
-                    + "ORDER BY rowid DESC",
+                    + ("ORDER BY input_index" if filters.get("run_id") else "ORDER BY rowid DESC"),
                     (filters["run_id"],) if filters.get("run_id") else (),
                 )
             ]

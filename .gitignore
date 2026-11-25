@@ -47,7 +47,8 @@ test-results/
 # Local inputs, audit stores, model caches and generated evidence
 # Keep frozen assets/models, assets/corpus, policies, prompts and lockfiles tracked.
 storage/
-data/input/
+# Uploaded datasets and recording samples stay local.
+/data/
 docs/evidence/
 *.db
 *.db-wal
@@ -80,5 +81,3 @@ NEXT_STEPS.md
 docs/*
 !docs/architecture.md
 !docs/OPERATIONS_GUIDE.md
-!docs/contracts.schema.json
-!docs/openapi.json

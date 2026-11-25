@@ -20,9 +20,10 @@ VALUES = {
 }
 
 
-def test_local_api_keeps_docs_and_retires_console_only_endpoints(fixture_runtime):
+def test_local_api_serves_dashboard_and_keeps_api_docs(fixture_runtime):
     with TestClient(create_app(fixture_runtime, start_worker=False)) as client:
-        assert client.get("/").json()["api_docs"] == "/docs"
+        assert "Every ticket. A clear next step." in client.get("/").text
+        assert client.get("/ui/app.js").status_code == 200
         assert client.get("/docs").status_code == 200
         for route in ("/api/v1/models", "/api/v1/datasets", "/api/v1/datasets/template"):
             assert client.get(route, headers=HEADERS).status_code == 404

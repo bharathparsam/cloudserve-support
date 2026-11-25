@@ -32,7 +32,10 @@ shutil.copy2(root / ".env.example", target / ".env.example")
 subprocess.run([sys.executable, str(target / "scripts/setup_secrets.py")], check=True)
 inputs = target / "data/input"
 inputs.mkdir(parents=True, exist_ok=True)
-records = json.loads((root / "tests/fixtures/four_channels.json").read_text()) + [
+records = [
+    {"channel": channel, "body": "How should I retry an HTTP 429 response?"}
+    for channel in ("email", "chat", "docs_comment", "forum")
+] + [
     None,
     {"ticket_id": "repeat", "channel": "chat", "body": "How do I retry HTTP 429?"},
     {"ticket_id": "repeat", "channel": "email", "body": "How do I retry HTTP 429?"},

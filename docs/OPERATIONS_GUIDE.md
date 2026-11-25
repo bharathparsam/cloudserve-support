@@ -1,6 +1,6 @@
 # Local operations
 
-Use the [README](../README.md) for the first sample run. This guide covers Linux installation, advanced configuration, monitoring and evaluation. Ordinary work needs no browser console, Node.js, application container or model picker. Keep the API, CLI and metrics server on the same `STORAGE_PATH` and `DATABASE_URL`. Fresh defaults use `storage/decisions.db`; changing storage selects a different database, not a migration.
+Use the [README](../README.md) for the first dataset run. This guide covers Linux installation, advanced configuration, monitoring and evaluation. Use `python -m src.api` to serve the optional browser dashboard at http://localhost:8000. It needs no Node.js, build step or application container; the CLI remains available. Keep the API, CLI and metrics server on the same `STORAGE_PATH` and `DATABASE_URL`. Fresh defaults use `storage/decisions.db`; changing storage selects a different database, not a migration.
 
 ## Linux installation
 
@@ -25,7 +25,7 @@ python -m pip install torch==2.15.0+cpu --index-url https://download.pytorch.org
 python -m pip install -r requirements-linux-arm64.txt
 ```
 
-The separate PyTorch command uses the CPU wheel index required by the lock's `+cpu` pin. Then continue at [Create your configuration](../README.md#3-create-your-configuration). Linux commands are documented from the platform locks; this macOS documentation check does not verify a Linux installation. Windows installation is not covered by this guide.
+The separate PyTorch command uses the CPU wheel index required by the lock's `+cpu` pin. Then continue at [Configure your local environment](../README.md#3-configure-your-local-environment). Linux commands are documented from the platform locks; this macOS documentation check does not verify a Linux installation. Windows installation is not covered by this guide.
 
 ## Environment settings
 
@@ -100,11 +100,7 @@ On macOS with [Homebrew](https://brew.sh), install and prepare the local configu
 
 ```bash
 brew install prometheus grafana
-mkdir -p storage/grafana-provisioning
-cp -R monitoring/grafana/provisioning/. storage/grafana-provisioning/
-sed 's/host.docker.internal/127.0.0.1/' monitoring/prometheus.yml > storage/prometheus-local.yml
-sed 's|http://prometheus:9090|http://127.0.0.1:9090|' monitoring/grafana/provisioning/datasources/default.yml > storage/grafana-provisioning/datasources/default.yml
-sed "s|/var/lib/grafana/dashboards|$PWD/monitoring/grafana/dashboards|" monitoring/grafana/provisioning/dashboards/default.yml > storage/grafana-provisioning/dashboards/default.yml
+python -m scripts.monitoring_config
 ```
 
 From the repository folder, run each command in a separate terminal. Activate `.venv` in the Python terminal:
@@ -121,7 +117,8 @@ GF_PATHS_PROVISIONING="$PWD/storage/grafana-provisioning" grafana server \
   --homepath "$(brew --prefix grafana)/share/grafana" \
   cfg:default.paths.data="$PWD/storage/grafana" \
   cfg:default.paths.logs="$PWD/storage/grafana/log" \
-  cfg:server.http_addr=127.0.0.1
+  cfg:server.http_addr=127.0.0.1 \
+  cfg:dashboards.default_home_dashboard_path="$PWD/monitoring/grafana/dashboards/cloudserve.json"
 ```
 
 Open [Prometheus](http://localhost:9090) or [Grafana](http://localhost:3000). On first Grafana login, use `admin` / `admin` and change the password. Open the **CloudServe Support** dashboard; its data source is configured automatically. Start monitoring before a batch to see live rates. Press `Ctrl+C` in each terminal to stop monitoring.
@@ -155,3 +152,21 @@ To back up consistently, stop automation and all writers first, then copy the da
 - Configuration refused: stop automation and wait for active runs; an invalid saved configuration must be explicitly corrected.
 - No Grafana data: keep the metrics process alive, check Prometheus targets, and allow at least one 15-second scrape. Historical cumulative metrics do not prove sustained service availability.
 - Missing report or nonzero exit: preserve the manifest and log; audit/export failure means incomplete evidence rather than success.
+
+## Saved reports and browser downloads
+
+Every completed dashboard or CLI run attempts to save a content-addressed report folder and ZIP at `storage/reports/<run-id>/<snapshot-hash>/`. The original CLI output directory and `storage/evaluation/` exports remain unchanged. A convenience-archive failure does not rewrite processing outcomes; use the authenticated download to retry packaging persisted data.
+
+Use **Report ZIP** for any saved run, **Progress ZIP** for a running batch, or **Download all reports** in Run history. Reports include a readable summary, metrics, outcomes, decisions, classification CSV and analysis files. Progress snapshots are captured consistently in one SQLite read transaction and include timestamps and pending counts. They are not completed evaluation evidence. Terminal failed/interrupted runs remain labelled incomplete. Report generation makes no model calls and does not change run state.
+
+A history archive covers all runs present in this workspace database when requested, each with its own capture timestamp. It is saved in `storage/reports/downloads/`. Its `index.json` states how many runs exported and lists failures explicitly. Files that exist only in an unrelated database or orphaned output directory are outside this archive. No `.env`, database backup, raw-input file, cache or source-code directory is bundled. Runtime reports remain ignored by Git.
+
+## Dashboard and rule maintenance
+
+The provisioned Grafana dashboard (`monitoring/grafana/dashboards/cloudserve.json`, UID `cloudserve`) has five sections: workspace overview, traffic/outcomes, latency/safety, provider observations and monitoring diagnostics. Traffic channel filters do not apply to unlabelled global latency/safety/provider metrics. Histogram quantiles are estimates; use exported run reports for exact percentiles.
+
+Prometheus loads recording rules and diagnostic alerts from `monitoring/rules/cloudserve.yml`. Open `/targets`, `/rules` and `/alerts` on port 9090 to inspect them. No Alertmanager or external notifications are configured. Metrics scrape health and a historical provider observation must not be described as an active inference health check or an availability SLA.
+
+For Docker, source dashboard changes are picked up by Grafana provisioning. After editing Prometheus configuration/rules, run `docker compose restart prometheus`. After provisioning/environment changes, run `docker compose up -d --force-recreate grafana`. Existing data volumes and credentials are preserved. Grafana's provisioned JSON is the source of truth; dashboard UI edits are disabled to prevent accidental divergence.
+
+For native services, rerun `python -m scripts.monitoring_config` after source configuration changes, then restart the manually launched Prometheus/Grafana processes. It prepares generated local config under storage, including absolute rule and dashboard paths; it never changes source configuration or service data.

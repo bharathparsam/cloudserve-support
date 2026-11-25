@@ -9,6 +9,7 @@ from src.ingest import load_records, digest, now
 from src.metrics import calculate
 
 HASH_PATHS = (
+    "ui",
     "src",
     "evaluation",
     "prompts",
@@ -615,6 +616,16 @@ def run(
                 os.unlink(lock_path)
             finally:
                 pipeline_lock.release()
+    if run_id:
+        from src.reports import save_run_report
+        try:
+            save_run_report(settings, store, run_id)
+        except Exception as report_error:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Convenience report archive unavailable (%s); original run reports remain saved",
+                type(report_error).__name__,
+            )
     if original_error is not None:
         raise original_error
     return manifest, metrics

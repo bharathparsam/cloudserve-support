@@ -1,0 +1,53 @@
+groups:
+  - name: cloudserve_overview
+    interval: 15s
+    rules:
+      - record: cloudserve:processed_total
+        expr: sum(cloudserve_outcomes{job="cloudserve"})
+      - record: cloudserve:answered_total
+        expr: sum(cloudserve_outcomes{job="cloudserve",action="auto_respond"})
+      - record: cloudserve:handoffs_total
+        expr: sum(cloudserve_outcomes{job="cloudserve",action="escalate"})
+      - record: cloudserve:answer_share_percent
+        expr: 100 * cloudserve:answered_total / clamp_min(cloudserve:processed_total, 1)
+      - record: cloudserve:throughput_per_minute:rate5m
+        expr: sum(rate(cloudserve_outcomes{job="cloudserve"}[5m])) * 60
+      - record: cloudserve:processing_p50_seconds:rate5m
+        expr: histogram_quantile(0.5, sum by (le) (rate(cloudserve_processing_seconds_bucket{job="cloudserve"}[5m])))
+      - record: cloudserve:processing_p95_seconds:rate5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(cloudserve_processing_seconds_bucket{job="cloudserve"}[5m])))
+      - record: cloudserve:processing_p95_seconds:stored
+        expr: histogram_quantile(0.95, sum by (le) (cloudserve_processing_seconds_bucket{job="cloudserve"}))
+  - name: cloudserve_diagnostics
+    rules:
+      - alert: CloudServeMetricsDown
+        expr: up{job="cloudserve"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: CloudServe metrics endpoint cannot be scraped
+          description: Check the metrics terminal and host connectivity. This alert does not directly test backend or model availability.
+      - alert: CloudServeHighHandoffShare
+        expr: (sum(increase(cloudserve_outcomes{job="cloudserve",action="escalate"}[15m])) / sum(increase(cloudserve_outcomes{job="cloudserve"}[15m])) > 0.70) and (sum(increase(cloudserve_outcomes{job="cloudserve"}[15m])) >= 5)
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 70 percent of recent tickets received handoffs
+          description: At least five tickets were processed in fifteen minutes. Inspect reasons and provider errors; required human escalation must stay enabled. This operational threshold does not replace assessment targets.
+      - alert: CloudServeProviderRateLimited
+        expr: sum(increase(cloudserve_provider_errors{job="cloudserve",class="429"}[10m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: A provider rate-limit response was observed
+          description: An HTTP 429 was recorded during the last ten minutes. This is observed call evidence, not an active provider probe.
+      - alert: PrometheusRuleEvaluationFailures
+        expr: increase(prometheus_rule_evaluation_failures_total{job="prometheus"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Prometheus could not evaluate one or more rules

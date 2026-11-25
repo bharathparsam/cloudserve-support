@@ -58,6 +58,14 @@ class JobRunner:
                                 self.pipeline,
                                 job["run_id"],
                             )
+                            from .reports import save_run_report
+                            try:
+                                save_run_report(self.pipeline.settings, self.store, job["run_id"])
+                            except Exception as report_error:
+                                # Existing evidence is already saved. A convenience
+                                # archive failure must not change the processing result.
+                                self.last_error = "Report archive: " + type(report_error).__name__
+
                 if not job:
                     self.stopping.wait(0.3)
             except Timeout:

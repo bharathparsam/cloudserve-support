@@ -1,284 +1,1779 @@
 {
   "uid": "cloudserve",
   "title": "CloudServe Support",
+  "description": "Operational overview from persisted decisions and Prometheus observations. Not a production SLA or customer-outcome claim.",
   "schemaVersion": 41,
-  "version": 3,
+  "version": 6,
+  "editable": false,
+  "tags": [
+    "cloudserve",
+    "support",
+    "operations"
+  ],
+  "timezone": "browser",
   "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "links": [
+    {
+      "title": "App",
+      "url": "http://localhost:8000",
+      "type": "link",
+      "targetBlank": true
+    },
+    {
+      "title": "Targets",
+      "url": "http://localhost:9090/targets",
+      "type": "link",
+      "targetBlank": true
+    },
+    {
+      "title": "Alerts",
+      "url": "http://localhost:9090/alerts",
+      "type": "link",
+      "targetBlank": true
+    },
+    {
+      "title": "Rules",
+      "url": "http://localhost:9090/rules",
+      "type": "link",
+      "targetBlank": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "channel",
+        "label": "Traffic channels",
+        "type": "custom",
+        "query": "email,chat,docs_comment,forum,invalid",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
-      "title": "Persisted outcomes",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
+      "title": "CloudServe / Operations",
+      "type": "text",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 12,
-        "h": 8
+        "w": 24,
+        "h": 4
       },
-      "targets": [
-        {
-          "expr": "sum(cloudserve_outcomes) by (action)",
-          "refId": "A"
-        }
-      ]
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## CloudServe support operations\nStored totals are historical. Recent rates need new processing across scrapes. Provider observations are not live health checks.\n\n[App](http://localhost:8000) \u00b7 [Prometheus targets](http://localhost:9090/targets) \u00b7 [Alerts](http://localhost:9090/alerts) \u00b7 Channel filter applies to traffic/outcomes only."
+      }
     },
     {
       "id": 2,
-      "title": "Blocked drafts",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
+      "title": "01 / Workspace overview",
+      "type": "row",
+      "collapsed": false,
       "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 12,
-        "h": 8
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 1
       },
-      "targets": [
-        {
-          "expr": "cloudserve_blocked",
-          "refId": "A"
-        }
-      ]
+      "panels": []
     },
     {
       "id": 3,
-      "title": "Automation enabled",
-      "type": "timeseries",
+      "title": "Processed \u00b7 selected channels",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 6,
+        "h": 4
+      },
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "gridPos": {
-        "x": 0,
-        "y": 8,
-        "w": 12,
-        "h": 8
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
-          "expr": "cloudserve_automation_enabled",
-          "refId": "A"
+          "expr": "sum(cloudserve_outcomes{job=\"cloudserve\",channel=~\"$channel\"})",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
         }
-      ]
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
     },
     {
       "id": 4,
-      "title": "Processing latency median and p95",
-      "type": "timeseries",
+      "title": "Answered \u00b7 selected channels",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 5,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Generated answers, not confirmed first-contact resolution.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "gridPos": {
-        "x": 12,
-        "y": 8,
-        "w": 12,
-        "h": 8
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum(rate(cloudserve_processing_seconds_bucket[5m])) by (le))",
-          "legendFormat": "median",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(cloudserve_processing_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
+          "expr": "sum(cloudserve_outcomes{job=\"cloudserve\",action=\"auto_respond\",channel=~\"$channel\"})",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
       }
     },
     {
       "id": 5,
-      "title": "Service scrape",
-      "type": "timeseries",
+      "title": "Human handoffs \u00b7 selected channels",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Includes blocked releases and required human handling.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(cloudserve_outcomes{job=\"cloudserve\",action=\"escalate\",channel=~\"$channel\"})",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 6,
+      "title": "Blocked releases \u00b7 workspace",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 5,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Input instruction-injection blocks or withheld drafts; included in handoffs. Not a distinct additional outcome.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_blocked{job=\"cloudserve\"}",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 7,
+      "title": "Metrics endpoint",
+      "type": "stat",
       "gridPos": {
         "x": 0,
-        "y": 16,
-        "w": 12,
-        "h": 8
+        "y": 9,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Only checks whether Prometheus can scrape the metrics process. Does not establish backend or provider availability.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Unreachable",
+                  "color": "orange"
+                },
+                "1": {
+                  "text": "Reachable",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
       },
       "targets": [
         {
           "expr": "up{job=\"cloudserve\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
         }
-      ]
-    },
-    {
-      "id": 6,
-      "title": "Provider inference: last observed call (not SLA)",
-      "description": "1=last actually observed inference call succeeded; 0=failed; no data means no inference evidence. Historical and potentially stale; inspect observation age. Cached/fixture and pre-POST refusals are excluded.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 16,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "expr": "cloudserve_provider_last_call_success",
-          "legendFormat": "{{role}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "title": "Age of last provider inference observation",
-      "description": "Seconds since actual observed inference; this separates stale historical success from fresh evidence. Not an active provider probe.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 24,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        }
-      },
-      "targets": [
-        {
-          "expr": "time() - cloudserve_provider_last_call_timestamp_seconds",
-          "legendFormat": "{{role}}",
-          "refId": "A"
-        }
-      ]
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
     },
     {
       "id": 8,
-      "title": "Tickets processed per hour by channel and outcome",
-      "type": "timeseries",
+      "title": "Automatic answers",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 9,
+        "w": 6,
+        "h": 4
+      },
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "gridPos": {
-        "x": 0,
-        "y": 32,
-        "w": 12,
-        "h": 8
-      },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
-        }
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Stopped",
+                  "color": "orange"
+                },
+                "1": {
+                  "text": "Enabled",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
       },
       "targets": [
         {
-          "expr": "sum(rate(cloudserve_outcomes[5m])) by (channel, action) * 3600",
-          "legendFormat": "{{channel}} {{action}}",
-          "refId": "A"
+          "expr": "cloudserve_automation_enabled{job=\"cloudserve\"}",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
         }
-      ]
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
     },
     {
       "id": 9,
-      "title": "Automatic answers and escalations percent",
-      "type": "timeseries",
+      "title": "Queued tickets \u00b7 workspace",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 6,
+        "h": 4
+      },
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "gridPos": {
-        "x": 12,
-        "y": 32,
-        "w": 12,
-        "h": 8
-      },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
-        }
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
-          "expr": "100 * sum(cloudserve_outcomes) by (action) / scalar(sum(cloudserve_outcomes))",
+          "expr": "cloudserve_queued_jobs{job=\"cloudserve\"}",
+          "refId": "A",
           "legendFormat": "{{action}}",
-          "refId": "A"
+          "instant": true,
+          "range": false
         }
-      ]
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
     },
     {
       "id": 10,
-      "title": "Guardrail activations per hour",
-      "type": "timeseries",
+      "title": "In-flight tickets \u00b7 workspace",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 9,
+        "w": 6,
+        "h": 4
+      },
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 40,
-        "w": 12,
-        "h": 8
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
-        }
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
-          "expr": "sum(rate(cloudserve_guardrail_blocks[5m])) by (type) * 3600",
-          "legendFormat": "{{type}}",
-          "refId": "A"
+          "expr": "cloudserve_inflight_jobs{job=\"cloudserve\"}",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
         }
-      ]
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
     },
     {
       "id": 11,
-      "title": "Confidence distribution",
+      "title": "02 / Traffic and outcomes",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "title": "Processing throughput \u00b7 tickets per minute",
       "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "description": "Observed changes after monitoring began, averaged over the rate interval. A historical database import is not new traffic.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (channel,action) (rate(cloudserve_outcomes{job=\"cloudserve\",channel=~\"$channel\"}[$__rate_interval])) * 60",
+          "refId": "A",
+          "legendFormat": "{{channel}} \u00b7 {{action}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Stored outcome mix",
+      "type": "piechart",
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 6,
+        "h": 8
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "auto_respond"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Answered"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "escalate"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Human handoff"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (action) (cloudserve_outcomes{job=\"cloudserve\",channel=~\"$channel\"})",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Stored tickets by channel",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 18,
+        "y": 14,
+        "w": 6,
+        "h": 8
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (channel) (cloudserve_outcomes{job=\"cloudserve\",channel=~\"$channel\"})",
+          "refId": "A",
+          "legendFormat": "{{channel}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "03 / Latency and safety",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 16,
+      "title": "Recent processing latency \u00b7 workspace",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "description": "Histogram estimates for processing observed during the last five minutes, across all outcomes. No observations yields NaN. Includes handoff/cache timing; not customer waiting time.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "cloudserve:processing_p50_seconds:rate5m",
+          "refId": "A",
+          "legendFormat": "Median estimate \u00b7 5m",
+          "instant": false,
+          "range": true
+        },
+        {
+          "expr": "cloudserve:processing_p95_seconds:rate5m",
+          "refId": "B",
+          "legendFormat": "p95 estimate \u00b7 5m",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Stored p95 \u00b7 histogram estimate",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Approximation from cumulative histogram buckets, across stored outcomes. Use the per-run report for exact percentile calculations. The original processing target is three seconds.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "cloudserve:processing_p95_seconds:stored",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 18,
+      "title": "Recorded provenance \u00b7 workspace",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 18,
+        "y": 23,
+        "w": 6,
+        "h": 8
+      },
+      "description": "Persisted record provenance. Live-labelled records do not imply every model stage made a fresh API call. Fixture replay is kept distinct.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_provenance{job=\"cloudserve\"}",
+          "refId": "A",
+          "legendFormat": "{{kind}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Stored answer share \u00b7 selected channels",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 27,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Automatic answer share, not confirmed resolution or customer satisfaction.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(cloudserve_outcomes{job=\"cloudserve\",action=\"auto_respond\",channel=~\"$channel\"}) / clamp_min(sum(cloudserve_outcomes{job=\"cloudserve\",channel=~\"$channel\"}),1)",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 20,
+      "title": "Failed or unknown checks \u00b7 cumulative",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "description": "Multiple checks can activate on the same ticket. These counts are not distinct blocked-ticket counts. No privacy activations does not prove zero privacy incidents.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (type) (cloudserve_guardrail_blocks{job=\"cloudserve\"})",
+          "refId": "A",
+          "legendFormat": "{{type}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      }
+    },
+    {
+      "id": 21,
+      "title": "Intent confidence distribution \u00b7 workspace",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "description": "Calibrated score bands for stored outcomes. Distribution does not establish calibration quality or classification correctness.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_confidence_band{job=\"cloudserve\"}",
+          "refId": "A",
+          "legendFormat": "{{lower}}\u2013{{upper}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "04 / Provider observations",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 23,
+      "title": "Last observed inference \u00b7 generation",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Last actually observed inference call. Cached/fixture calls and pre-POST refusals are excluded. Historical success is not current provider availability or SLA.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Last call failed",
+                  "color": "orange"
+                },
+                "1": {
+                  "text": "Last call succeeded",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_provider_last_call_success{job=\"cloudserve\",role=\"generation\"}",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 24,
+      "title": "Age of inference observation",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 40,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Seconds since the last real inference observation. Old evidence remains visibly old; this dashboard makes no provider probe.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "time() - cloudserve_provider_last_call_timestamp_seconds{job=\"cloudserve\",role=\"generation\"}",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 25,
+      "title": "Provider errors \u00b7 cumulative",
+      "type": "bargauge",
       "gridPos": {
         "x": 12,
         "y": 40,
         "w": 12,
         "h": 8
       },
+      "description": "Deduplicated saved call metadata by HTTP status or timeout class; not a model-quality score.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
-        }
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
-          "expr": "cloudserve_confidence_band",
-          "legendFormat": "{{lower}} to {{upper}}",
-          "refId": "A"
+          "expr": "sum by (class) (cloudserve_provider_errors{job=\"cloudserve\"})",
+          "refId": "A",
+          "legendFormat": "{{class}}",
+          "instant": true,
+          "range": false
         }
-      ]
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      }
+    },
+    {
+      "id": 26,
+      "title": "Recorded retries \u00b7 cumulative",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Persisted retry counts, not a count of unique tickets.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "cloudserve_provider_retries{job=\"cloudserve\"}",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 27,
+      "title": "New rate-limit responses \u00b7 10m",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 44,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Requires observations across scrapes. Historical 429 counts are not automatically new failures.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(cloudserve_provider_errors{job=\"cloudserve\",class=\"429\"}[10m]))",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 28,
+      "title": "05 / Monitoring diagnostics",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 29,
+      "title": "Scrape status history",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 12,
+        "h": 7
+      },
+      "description": "1 = reachable scrape target; 0 = failed scrape. Metrics reachability does not test OpenRouter inference.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "up{job=~\"cloudserve|prometheus\"}",
+          "refId": "A",
+          "legendFormat": "{{job}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 30,
+      "title": "Rule evaluation failures \u00b7 5m",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 49,
+        "w": 6,
+        "h": 7
+      },
+      "description": "Prometheus internal rule errors. Inspect the Rules page for details.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(prometheus_rule_evaluation_failures_total{job=\"prometheus\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "Rule failures",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 31,
+      "title": "Firing alerts observed",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 49,
+        "w": 6,
+        "h": 7
+      },
+      "description": "Zero is shown only when Prometheus self-scrape is observed UP and no firing-alert series is returned. Missing monitoring evidence remains unknown. No external notification service is configured.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No observations",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "No firing alerts",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(ALERTS{alertstate=\"firing\"}) or (0 * max(up{job=\"prometheus\"} == 1))",
+          "refId": "A",
+          "legendFormat": "{{action}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      }
     }
   ]
 }

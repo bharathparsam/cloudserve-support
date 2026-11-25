@@ -1,0 +1,33 @@
+rule_files:
+  - /etc/prometheus/rules/cloudserve.yml
+evaluation_interval: 15s
+tests:
+  - name: metrics scrape failure becomes visible after one minute
+    interval: 15s
+    input_series:
+      - series: 'up{job="cloudserve"}'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CloudServeMetricsDown
+        exp_alerts:
+          - exp_labels:
+              job: cloudserve
+              severity: critical
+            exp_annotations:
+              summary: CloudServe metrics endpoint cannot be scraped
+              description: Check the metrics terminal and host connectivity. This alert does not directly test backend or model availability.
+  - name: observed rate limits produce a warning without provider probes
+    interval: 15s
+    input_series:
+      - series: 'cloudserve_provider_errors{job="cloudserve",class="429"}'
+        values: '0+1x40'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: CloudServeProviderRateLimited
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: A provider rate-limit response was observed
+              description: An HTTP 429 was recorded during the last ten minutes. This is observed call evidence, not an active provider probe.

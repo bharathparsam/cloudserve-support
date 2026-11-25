@@ -2,5 +2,9 @@ apiVersion: 1
 providers:
   - name: CloudServe
     type: file
+    folder: CloudServe
+    updateIntervalSeconds: 15
+    allowUiUpdates: false
+    disableDeletion: true
     options:
       path: /var/lib/grafana/dashboards

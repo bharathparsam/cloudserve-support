@@ -238,6 +238,8 @@ def prometheus_text(store):
         f'cloudserve_blocked {sum(x["blocked"] for x in outcomes)}',
         "# TYPE cloudserve_automation_enabled gauge",
         f'cloudserve_automation_enabled {int(store.control()["enabled"])}',
+        "# TYPE cloudserve_queued_jobs gauge",
+        f'cloudserve_queued_jobs {sum(t.get("status")=="queued" for t in tickets)}',
         "# TYPE cloudserve_inflight_jobs gauge",
         f'cloudserve_inflight_jobs {sum(t.get("status")=="running" for t in tickets)}',
         "# TYPE cloudserve_processing_seconds histogram",
@@ -258,6 +260,7 @@ def prometheus_text(store):
             f"cloudserve_processing_seconds_sum {sum(values)}",
         ]
     )
+    lines += ["# HELP cloudserve_guardrail_blocks Persisted failed or unknown check activations; checks may overlap on a ticket", "# TYPE cloudserve_guardrail_blocks counter"]
     for name in sorted({c["name"] for x in outcomes for c in x.get("checks", [])}):
         safe = "".join(c for c in name if c.isalnum() or c == "_")
         lines.append(
@@ -323,6 +326,7 @@ def prometheus_text(store):
         "# TYPE cloudserve_provider_retries counter",
         f'cloudserve_provider_retries {sum(int(m.get("last_retry_count",0)) for m in calls.values())}',
     ]
+    lines += ["# TYPE cloudserve_provider_errors counter"]
     for error in ("network_timeout", "401", "402", "403", "429", "500", "503"):
         lines.append(
             f'cloudserve_provider_errors{{class="{error}"}} {sum(str(m.get("last_error"))==error or str(m.get("last_http_status"))==error for m in calls.values())}'
